@@ -687,7 +687,20 @@ class Tools:
                     else:
                         output = function(**args)
                     
-                    print(f"Function output: {output}")
+                    # For read_file, don't print the entire output to terminal
+                    if function_name == "read_file":
+                        target_file = args.get("target_file", "")
+                        start_line = args.get("start_line", 1)
+                        end_line = args.get("end_line", None)
+                        if end_line:
+                            line_count = end_line - start_line + 1
+                        else:
+                            # Estimate line count from output
+                            line_count = output.count('\n') + 1
+                        print(f"Function output: Read {line_count} lines from {target_file}")
+                    else:
+                        print(f"Function output: {output}")
+                    
                     llm_client.add_message("tool", str(output), name=function_name)
                     results.append((function_name, str(output)))
                 except Exception as e:
