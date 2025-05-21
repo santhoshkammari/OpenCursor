@@ -5,21 +5,16 @@ import asyncio
 from typing import List, Dict, Optional, Set
 from pathlib import Path
 
-from prompt_toolkit import Application, PromptSession
-from prompt_toolkit.layout import Layout, HSplit, VSplit, Window, FormattedTextControl
-from prompt_toolkit.layout.containers import Float, FloatContainer
-from prompt_toolkit.styles import Style
-from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.formatted_text import HTML
-from prompt_toolkit.history import FileHistory
-from prompt_toolkit.completion import WordCompleter
-from prompt_toolkit.filters import Condition
-from prompt_toolkit.widgets import TextArea
-from prompt_toolkit.lexers import PygmentsLexer
-from pygments.lexers import MarkdownLexer
+from rich.console import Console
+from rich.panel import Panel
+from rich.layout import Layout
+from rich.table import Table
+from rich.prompt import Prompt
+from rich.syntax import Syntax
+from rich import box
+from rich.markdown import Markdown
 
 from code_agent.agent import CodeAgent
-from code_agent.llm import LLMClient
 
 # ASCII Art for OPENCURSOR
 OPENCURSOR_LOGO = """
@@ -35,123 +30,84 @@ OPENCURSOR_LOGO = """
 class OpenCursorApp:
     def __init__(self, model_name: str = "qwen3_14b_q6k:latest", host: str = "http://192.168.170.76:11434"):
         self.agent = CodeAgent(model_name=model_name, host=host)
-        self.history_file = os.path.expanduser("~/.opencursor_history")
-        self.session = PromptSession(history=FileHistory(self.history_file))
+        self.console = Console()
         
         # Chat context management
         self.files_in_context: Set[Path] = set()
         self.chat_history: List[Dict[str, str]] = []
         self.current_workspace = Path.cwd()
         
-        # Command completions
+        # Available commands
         self.commands = [
             "/agent", "/chat", "/add", "/drop", "/clear", 
             "/help", "/exit", "/repomap", "/focus"
         ]
-        self.command_completer = WordCompleter(self.commands)
         
-        # Create key bindings
-        self.kb = KeyBindings()
+        # Output storage
+        self.last_output = ""
+
+    def print_logo(self):
+        """Print the OpenCursor logo"""
+        self.console.print(f"[bold blue]{OPENCURSOR_LOGO}[/bold blue]")
         
-        # Status message
-        self.status_message = ""
-        self.output_text = ""
+    def print_help(self):
+        """Print help information"""
+        table = Table(title="OpenCursor Commands", box=box.ROUNDED)
+        table.add_column("Command", style="cyan")
+        table.add_column("Description", style="green")
         
-        # Initialize the UI
-        self.setup_ui()
-    
-    def setup_ui(self):
-        """Set up the terminal UI"""
-        style = Style.from_dict({
-            'status': 'bg:#333333 #ffffff',
-            'command-line': 'bg:#000000 #ffffff',
-            'output-area': 'bg:#101010 #00ff00',
-            'header': 'bg:#000080 #ffffff bold',
-        })
+        table.add_row("/agent <message>", "Send a message to the agent (with tools)")
+        table.add_row("/chat <message>", "Chat with the LLM directly (no tools)")
+        table.add_row("/add <filepath>", "Add a file to the chat context")
+        table.add_row("/drop <filepath>", "Remove a file from the chat context")
+        table.add_row("/clear", "Clear all files from the chat context")
+        table.add_row("/repomap", "Show a map of the repository")
+        table.add_row("/focus <filepath>", "Focus on a specific file")
+        table.add_row("/help", "Show this help message")
+        table.add_row("/exit", "Exit the application")
         
-        # Header with logo and status
-        self.header_control = FormattedTextControl(HTML(f"<header>{OPENCURSOR_LOGO}</header>"))
-        header = Window(content=self.header_control, height=8)
+        self.console.print(table)
         
-        # Status bar
-        self.status_control = FormattedTextControl(lambda: f"Status: {self.status_message}")
-        status_bar = Window(content=self.status_control, height=1, style="class:status")
-        
-        # Output area
-        self.output_control = FormattedTextControl(lambda: self.output_text)
-        output_area = Window(content=self.output_control, wrap_lines=True, style="class:output-area")
-        
-        # Files in context area
-        self.files_control = FormattedTextControl(lambda: self.format_files_in_context())
-        files_area = Window(content=self.files_control, width=30, style="class:status")
-        
-        # Main layout
-        self.layout = Layout(
-            HSplit([
-                header,
-                VSplit([
-                    output_area,
-                    files_area,
-                ]),
-                status_bar,
-            ])
-        )
-        
-        # Create application
-        self.app = Application(
-            layout=self.layout,
-            key_bindings=self.kb,
-            full_screen=True,
-            style=style,
-            mouse_support=True,
-        )
-    
-    def format_files_in_context(self) -> str:
-        """Format the list of files in context for display"""
+    def show_files_in_context(self):
+        """Show files currently in context"""
         if not self.files_in_context:
-            return "No files in context"
+            self.console.print("[yellow]No files in context[/yellow]")
+            return
+            
+        table = Table(title="Files in Context", box=box.SIMPLE)
+        table.add_column("File", style="green")
         
-        result = "FILES IN CONTEXT:\n"
         for file_path in sorted(self.files_in_context):
-            result += f"- {file_path.relative_to(self.current_workspace)}\n"
-        return result
-    
-    def update_status(self, message: str):
-        """Update the status message"""
-        self.status_message = message
-        self.app.invalidate()
-    
-    def update_output(self, text: str):
-        """Update the output text area"""
-        self.output_text = text
-        self.app.invalidate()
-    
+            table.add_row(str(file_path.relative_to(self.current_workspace)))
+            
+        self.console.print(table)
+        
     def add_file_to_context(self, file_path: str):
         """Add a file to the chat context"""
         path = Path(file_path).resolve()
         if path.exists() and path.is_file():
             self.files_in_context.add(path)
-            self.update_status(f"Added {path} to context")
+            self.console.print(f"[green]Added {path} to context[/green]")
         else:
-            self.update_status(f"File not found: {file_path}")
+            self.console.print(f"[red]File not found: {file_path}[/red]")
     
     def drop_file_from_context(self, file_path: str):
         """Remove a file from the chat context"""
         path = Path(file_path).resolve()
         if path in self.files_in_context:
             self.files_in_context.remove(path)
-            self.update_status(f"Removed {path} from context")
+            self.console.print(f"[green]Removed {path} from context[/green]")
         else:
-            self.update_status(f"File not in context: {file_path}")
+            self.console.print(f"[red]File not in context: {file_path}[/red]")
     
     def clear_context(self):
         """Clear all files from the chat context"""
         self.files_in_context.clear()
-        self.update_status("Cleared all files from context")
+        self.console.print("[green]Cleared all files from context[/green]")
     
     def generate_repo_map(self):
         """Generate a map of the repository"""
-        repo_map = "REPOSITORY MAP:\n"
+        self.console.print("[bold]REPOSITORY MAP:[/bold]")
         
         # Get all files in the current directory recursively
         all_files = []
@@ -164,43 +120,35 @@ class OpenCursorApp:
                     all_files.append(rel_path)
         
         # Sort and format files
+        table = Table(box=box.SIMPLE)
+        table.add_column("File", style="green")
+        table.add_column("Status", style="cyan")
+        
         for file in sorted(all_files):
             if any(Path(file).resolve() == f for f in self.files_in_context):
-                repo_map += f"* {file} (in context)\n"
+                table.add_row(file, "in context")
             else:
-                repo_map += f"- {file}\n"
-        
-        return repo_map
+                table.add_row(file, "")
+                
+        self.console.print(table)
     
     async def process_command(self, command: str, args: str) -> bool:
         """Process a command and return whether to continue running"""
         if command == "/exit":
             return False
         elif command == "/help":
-            help_text = """
-            OPENCURSOR COMMANDS:
-            /agent <message> - Send a message to the agent (with tools)
-            /chat <message> - Chat with the LLM directly (no tools)
-            /add <filepath> - Add a file to the chat context
-            /drop <filepath> - Remove a file from the chat context
-            /clear - Clear all files from the chat context
-            /repomap - Show a map of the repository
-            /focus <filepath> - Focus on a specific file
-            /help - Show this help message
-            /exit - Exit the application
-            """
-            self.update_output(help_text)
+            self.print_help()
         elif command == "/agent":
-            self.update_status("Processing with agent...")
+            self.console.print("[yellow]Processing with agent...[/yellow]")
             response = await self.agent(args)
-            self.update_output(response)
-            self.update_status("Agent response received")
+            self.console.print(Panel(response, title="Agent Response", border_style="green"))
+            self.last_output = response
         elif command == "/chat":
-            self.update_status("Chatting with LLM...")
+            self.console.print("[yellow]Chatting with LLM...[/yellow]")
             # Direct chat with LLM without tools
             response = await self.agent.llm_client.chat(user_message=args, tools=None)
-            self.update_output(response.message.content)
-            self.update_status("LLM response received")
+            self.console.print(Panel(response.message.content, title="LLM Response", border_style="blue"))
+            self.last_output = response.message.content
         elif command == "/add":
             self.add_file_to_context(args)
         elif command == "/drop":
@@ -208,67 +156,69 @@ class OpenCursorApp:
         elif command == "/clear":
             self.clear_context()
         elif command == "/repomap":
-            repo_map = self.generate_repo_map()
-            self.update_output(repo_map)
+            self.generate_repo_map()
         elif command == "/focus":
             if os.path.exists(args):
                 self.add_file_to_context(args)
-                self.update_status(f"Focusing on {args}")
+                self.console.print(f"[green]Focusing on {args}[/green]")
                 try:
                     with open(args, 'r') as f:
                         content = f.read()
-                    self.update_output(f"File: {args}\n\n{content}")
+                    
+                    # Determine syntax highlighting based on file extension
+                    extension = os.path.splitext(args)[1].lstrip('.')
+                    syntax = Syntax(content, extension or "text", line_numbers=True)
+                    self.console.print(Panel(syntax, title=f"File: {args}", border_style="cyan"))
                 except Exception as e:
-                    self.update_status(f"Error reading file: {e}")
+                    self.console.print(f"[red]Error reading file: {e}[/red]")
             else:
-                self.update_status(f"File not found: {args}")
+                self.console.print(f"[red]File not found: {args}[/red]")
         else:
-            self.update_status(f"Unknown command: {command}")
+            self.console.print(f"[red]Unknown command: {command}[/red]")
         
         return True
     
     async def run(self):
         """Run the application"""
         # Show the logo and welcome message
-        welcome_message = f"{OPENCURSOR_LOGO}\nWelcome to OpenCursor! Type /help for available commands."
-        self.update_output(welcome_message)
-        self.update_status("Ready")
+        self.print_logo()
+        self.console.print("[bold green]Welcome to OpenCursor![/bold green] Type [bold]/help[/bold] for available commands.")
         
-        # Start the application in the background
-        with self.app.session():
-            running = True
-            while running:
-                try:
-                    # Get user input
-                    user_input = await self.session.prompt_async(
-                        "OpenCursor> ", 
-                        completer=self.command_completer
-                    )
+        running = True
+        while running:
+            try:
+                # Show files in context
+                self.show_files_in_context()
+                
+                # Get user input
+                user_input = Prompt.ask("[bold cyan]OpenCursor>[/bold cyan]")
+                
+                # Parse command
+                if user_input.startswith('/'):
+                    parts = user_input.split(' ', 1)
+                    command = parts[0].lower()
+                    args = parts[1] if len(parts) > 1 else ""
+                    running = await self.process_command(command, args)
+                else:
+                    # Default to agent if no command specified
+                    self.console.print("[yellow]Processing with agent...[/yellow]")
+                    response = await self.agent(user_input)
+                    self.console.print(Panel(response, title="Agent Response", border_style="green"))
+                    self.last_output = response
                     
-                    # Parse command
-                    if user_input.startswith('/'):
-                        parts = user_input.split(' ', 1)
-                        command = parts[0].lower()
-                        args = parts[1] if len(parts) > 1 else ""
-                        running = await self.process_command(command, args)
-                    else:
-                        # Default to agent if no command specified
-                        self.update_status("Processing with agent...")
-                        response = await self.agent(user_input)
-                        self.update_output(response)
-                        self.update_status("Agent response received")
-                        
-                except KeyboardInterrupt:
-                    running = False
-                except Exception as e:
-                    self.update_status(f"Error: {str(e)}")
+            except KeyboardInterrupt:
+                self.console.print("\n[yellow]Exiting...[/yellow]")
+                running = False
+            except Exception as e:
+                self.console.print(f"[bold red]Error:[/bold red] {str(e)}")
         
-        print("Thank you for using OpenCursor!")
+        self.console.print("[bold green]Thank you for using OpenCursor![/bold green]")
 
 async def main():
     """Main entry point"""
-    print(OPENCURSOR_LOGO)
-    print("Starting OpenCursor...")
+    console = Console()
+    console.print(f"[bold blue]{OPENCURSOR_LOGO}[/bold blue]")
+    console.print("[bold green]Starting OpenCursor...[/bold green]")
     
     # Parse command line arguments for model and host
     model_name = "qwen3_14b_q6k:latest"
@@ -282,4 +232,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\nGoodbye!")
+        Console().print("\n[bold red]Goodbye![/bold red]")
