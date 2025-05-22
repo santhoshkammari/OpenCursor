@@ -43,36 +43,6 @@ OPENCURSOR_LOGO = """
 # Custom orange theme color
 ORANGE_COLOR = "#FF8C69"
 
-# Create a custom box style with orange color
-class OrangeBox(box.Box):
-    """Custom box with orange borders."""
-    def __init__(self, box_type=box.ROUNDED):
-        self.box = box_type
-        
-    def get_top(self):
-        return f"[{ORANGE_COLOR}]{self.box.get_top()}[/{ORANGE_COLOR}]"
-        
-    def get_bottom(self):
-        return f"[{ORANGE_COLOR}]{self.box.get_bottom()}[/{ORANGE_COLOR}]"
-    
-    def get_left(self):
-        return f"[{ORANGE_COLOR}]{self.box.get_left()}[/{ORANGE_COLOR}]"
-        
-    def get_right(self):
-        return f"[{ORANGE_COLOR}]{self.box.get_right()}[/{ORANGE_COLOR}]"
-    
-    def get_top_left(self):
-        return f"[{ORANGE_COLOR}]{self.box.get_top_left()}[/{ORANGE_COLOR}]"
-        
-    def get_top_right(self):
-        return f"[{ORANGE_COLOR}]{self.box.get_top_right()}[/{ORANGE_COLOR}]"
-        
-    def get_bottom_left(self):
-        return f"[{ORANGE_COLOR}]{self.box.get_bottom_left()}[/{ORANGE_COLOR}]"
-        
-    def get_bottom_right(self):
-        return f"[{ORANGE_COLOR}]{self.box.get_bottom_right()}[/{ORANGE_COLOR}]"
-
 # Custom completers for OpenCursor
 class CommandCompleter(Completer):
     """Completer for OpenCursor commands"""
@@ -213,8 +183,8 @@ class OpenCursorApp:
         self.console = Console(theme=custom_theme, width=None)
         
         # Create custom box styles
-        self.orange_box_rounded = OrangeBox(box.ROUNDED)
-        self.orange_box_simple = OrangeBox(box.SIMPLE)
+        self.orange_box_rounded = box.ROUNDED
+        self.orange_box_simple = box.SIMPLE
         
         # Chat context management
         self.files_in_context: Set[Path] = set()
@@ -286,7 +256,7 @@ class OpenCursorApp:
         
     def print_help(self):
         """Print help information"""
-        table = Table(title=f"[{ORANGE_COLOR} bold]OpenCursor Commands[/{ORANGE_COLOR} bold]", box=self.orange_box_rounded)
+        table = Table(title=f"[{ORANGE_COLOR} bold]OpenCursor Commands[/{ORANGE_COLOR} bold]", box=box.ROUNDED, border_style=ORANGE_COLOR)
         table.add_column("Command", style="cyan")
         table.add_column("Description", style="green")
         
@@ -304,7 +274,7 @@ class OpenCursorApp:
         self.console.print(table)
         
         # Add information about agent modes
-        agent_modes = Table(title=f"[{ORANGE_COLOR} bold]Agent Modes[/{ORANGE_COLOR} bold]", box=self.orange_box_rounded)
+        agent_modes = Table(title=f"[{ORANGE_COLOR} bold]Agent Modes[/{ORANGE_COLOR} bold]", box=box.ROUNDED, border_style=ORANGE_COLOR)
         agent_modes.add_column("Mode", style="cyan")
         agent_modes.add_column("Description", style="green")
         
@@ -319,7 +289,7 @@ class OpenCursorApp:
             self.console.print("[red]No files in context[/red]")
             return
             
-        table = Table(title=f"[{ORANGE_COLOR} bold]Files in Context[/{ORANGE_COLOR} bold]", box=self.orange_box_simple)
+        table = Table(title=f"[{ORANGE_COLOR} bold]Files in Context[/{ORANGE_COLOR} bold]", box=box.SIMPLE, border_style=ORANGE_COLOR)
         table.add_column("File", style="green")
         
         for file_path in sorted(self.files_in_context):
@@ -333,7 +303,7 @@ class OpenCursorApp:
             return
             
         # Create a panel to display tool results
-        table = Table(box=self.orange_box_rounded, title=f"[{ORANGE_COLOR} bold]Recent Tool Results[/{ORANGE_COLOR} bold]", expand=True)
+        table = Table(box=box.ROUNDED, title=f"[{ORANGE_COLOR} bold]Recent Tool Results[/{ORANGE_COLOR} bold]", expand=True, border_style=ORANGE_COLOR)
         table.add_column("Tool", style="cyan")
         table.add_column("Result", style="white")
         
@@ -442,7 +412,7 @@ class OpenCursorApp:
                     all_files.append(rel_path)
         
         # Sort and format files
-        table = Table(box=self.orange_box_simple, expand=True)
+        table = Table(box=box.SIMPLE, expand=True, border_style=ORANGE_COLOR)
         table.add_column("File", style="green")
         table.add_column("Status", style="cyan")
         
