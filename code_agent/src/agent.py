@@ -5,6 +5,42 @@ from .llm import LLMClient
 from .tools import Tools
 from .prompts import SYSTEM_PROMPT, AUTONOMOUS_AGENT_PROMPT
 
+# Add interactive prompt
+INTERACTIVE_AGENT_PROMPT = """
+You are an interactive AI coding agent that works step-by-step with the user. You will be given a task and must complete it one step at a time, waiting for user approval between steps.
+
+1. Analyze the task and suggest the next step
+2. Wait for user approval before executing any tool
+3. After each tool use, explain the result and suggest the next step
+4. Continue until the task is complete
+
+<important>
+- Suggest ONE tool call at a time
+- Wait for user approval before proceeding
+- Explain your reasoning clearly
+- Be methodical and thorough
+</important>
+
+<available_tools>
+1. File operations:
+   - read_file(target_file, start_line, end_line) - Read contents of a file
+   - edit_file(target_file, code_edit) - Edit or create a file
+   - list_dir(directory) - List contents of a directory
+   - delete_file(target_file) - Delete a file
+
+2. Code analysis:
+   - grep_search(query, include_pattern, is_regexp) - Search for text patterns in files
+   - file_search(query) - Search for files by name pattern
+   - semantic_search(query) - Search for semantically relevant code
+
+3. Terminal:
+   - run_terminal_cmd(command, is_background) - Run a terminal command
+
+4. Web tools:
+   - web_search(search_term) - Search the web
+   - fetch_webpage(urls, query) - Fetch contents from web pages
+</available_tools>
+"""
 
 class CodeAgent:
     def __init__(self, model_name: str = "qwen3_14b_q6k:latest", host: str = "http://192.168.170.76:11434", workspace_root: str = None):
@@ -39,6 +75,33 @@ class CodeAgent:
         """
         return await self.autonomous_mode(user_message)
     
+    async def interactive(self, user_message: str) -> str:
+        """
+        Process a user message in interactive mode (one tool call at a time).
+        
+        Args:
+            user_message (str): The user's message.
+            
+        Returns:
+            str: The final response from the model.
+        """
+        # Reset the conversation
+        self.llm_client.messages = []
+        
+        # Set the system prompt to interactive agent mode
+        self.llm_client.add_message("system", INTERACTIVE_AGENT_PROMPT)
+        
+        # Add the initial user message
+        self.llm_client.add_message("user", f"Task: {user_message}")
+        
+        # Get the initial response
+        response = await self.llm_client.chat(
+            user_message="",  # Empty message to just get the next response
+            tools=self.tools_manager.tools
+        )
+        
+        # Return the initial plan
+        return response.message.content
 
     async def autonomous_mode(self, user_message: str) -> str:
         """
@@ -72,8 +135,28 @@ class CodeAgent:
             
             # Process tool calls if any
             if response.message.tool_calls:
-                # Log tool calls
-                tool_calls_info = [f"Tool: {tc['function']['name']}" for tc in response.message.tool_calls]
+                # Log tool calls with simplified names
+                tool_calls_info = []
+                for tc in response.message.tool_calls:
+                    name = tc['function']['name']
+                    # Simplify tool names for display
+                    if name == 'read_file':
+                        tool_calls_info.append("Reading file...")
+                    elif name == 'list_dir':
+                        tool_calls_info.append("Listing directory...")
+                    elif name == 'edit_file':
+                        tool_calls_info.append("Editing file...")
+                    elif name == 'grep_search':
+                        tool_calls_info.append("Searching code...")
+                    elif name == 'file_search':
+                        tool_calls_info.append("Finding files...")
+                    elif name == 'semantic_search':
+                        tool_calls_info.append("Semantic search...")
+                    elif name == 'run_terminal_cmd':
+                        tool_calls_info.append("Running command...")
+                    else:
+                        tool_calls_info.append(f"{name}...")
+                
                 execution_log.append(f"Step {i+1}: {', '.join(tool_calls_info)}")
                 
                 # Process tool calls

@@ -6,6 +6,7 @@ import aiohttp
 import subprocess
 from typing import Callable, Dict, Any, Optional
 from difflib import unified_diff
+from rich.console import Console
 
 
 class Tools:
@@ -226,7 +227,7 @@ class Tools:
             except Exception as e:
                 return f"Error editing file: {str(e)}"
         
-        def list_dir(directory: str = ".") -> str:
+        def list_dir(directory: str = ".",explanation:str="") -> str:
             """
             List contents of a directory.
             
@@ -295,12 +296,13 @@ class Tools:
             except Exception as e:
                 return f"Error searching files: {str(e)}"
         
-        def delete_file(target_file: str) -> str:
+        def delete_file(target_file: str, explanation: str = "") -> str:
             """
             Delete a file.
             
             Args:
                 target_file (str): Path to the file to delete
+                explanation (str): Explanation for why the file is being deleted
                 
             Returns:
                 str: Result of the operation
@@ -309,8 +311,19 @@ class Tools:
             
             try:
                 if os.path.exists(file_path):
-                    os.remove(file_path)
-                    return f"Deleted file: {target_file}"
+                    # Ask for confirmation
+                    console = Console()
+                    console.print(f"[yellow]WARNING: About to delete file: {target_file}[/yellow]")
+                    if explanation:
+                        console.print(f"Reason: {explanation}")
+                    
+                    confirmation = input("Are you sure you want to delete this file? (y/n): ").strip().lower()
+                    
+                    if confirmation == 'y' or confirmation == 'yes':
+                        os.remove(file_path)
+                        return f"Deleted file: {target_file}"
+                    else:
+                        return f"File deletion cancelled: {target_file}"
                 else:
                     return f"File not found: {target_file}"
             except Exception as e:
@@ -1115,58 +1128,117 @@ class Tools:
 
     async def process_tool_calls(self, tool_calls: list, llm_client) -> list:
         """
-        Process tool calls from the model response.
+        Process tool calls from the LLM and add the results to the chat.
 
         Args:
-            tool_calls (list): List of tool calls from the model.
-            llm_client: The LLMClient instance to add messages to.
+            tool_calls (list): List of tool calls from the LLM.
+            llm_client: The LLM client to add results to.
 
         Returns:
-            list: List of (tool_name, tool_output) pairs.
+            list: Results from the tool calls.
         """
+        console = Console()
+        
         results = []
         for tool_call in tool_calls:
             function_name = tool_call['function']['name']
-            function = self.available_functions.get(function_name)
+            function_args = tool_call['function']['arguments']
             
-            if function:
-                try:
-                    args = tool_call['function']['arguments']
-                    # Convert string args to dict if needed
-                    if isinstance(args, str):
-                        args = json.loads(args)
-                    
-                    print(f"Calling function: {function_name}")
-                    print(f"Arguments: {args}")
-                    
-                    # Check if the function is async
-                    import inspect
-                    if inspect.iscoroutinefunction(function):
-                        output = await function(**args)
-                    else:
-                        output = function(**args)
-                    
-                    # For read_file, don't print the entire output to terminal
-                    if function_name == "read_file":
-                        target_file = args.get("target_file", "")
-                        
-                        # Calculate line_count based on the actual output string for logging purposes
-                        # 'output' here is the string returned by the read_file function.
-                        actual_lines_in_output = len(output.splitlines()) if output else 0
-                        print(f"Function output: Read {actual_lines_in_output} lines from {target_file}")
-                    else:
-                        print(f"Function output: {output}")
-                    
-                    llm_client.add_message("tool", str(output), name=function_name)
-                    results.append((function_name, str(output)))
-                except Exception as e:
-                    error_message = f"Error executing {function_name}: {str(e)}"
-                    print(error_message)
-                    llm_client.add_message("tool", error_message, name=function_name)
-                    results.append((function_name, error_message))
+            # Check if there's an explanation and print it if available
+            if isinstance(function_args, dict) and 'explanation' in function_args and function_args['explanation']:
+                console.print(function_args['explanation'])
+            
+            # Display simplified tool call message
+            if function_name == 'read_file':
+                target_file = function_args.get('target_file', '...')
+                console.print(f"[cyan]Reading {target_file}[/cyan]")
+            elif function_name == 'list_dir':
+                directory = function_args.get('relative_workspace_path', '.')
+                console.print(f"[cyan]Listing directory {directory}[/cyan]")
+            elif function_name == 'edit_file':
+                target_file = function_args.get('target_file', '...')
+                console.print(f"[cyan]Editing {target_file}[/cyan]")
+            elif function_name == 'grep_search':
+                query = function_args.get('query', '...')
+                console.print(f"[cyan]Searching code for: {query}[/cyan]")
+            elif function_name == 'file_search':
+                query = function_args.get('query', '...')
+                console.print(f"[cyan]Finding files matching: {query}[/cyan]")
+            elif function_name == 'codebase_search':
+                query = function_args.get('query', '...')
+                console.print(f"[cyan]Semantic search for: {query}[/cyan]")
+            elif function_name == 'semantic_search':
+                query = function_args.get('query', '...')
+                console.print(f"[cyan]Semantic search for: {query}[/cyan]")
+            elif function_name == 'list_code_usages':
+                symbol_name = function_args.get('symbol_name', '...')
+                console.print(f"[cyan]Finding usages of: {symbol_name}[/cyan]")
+            elif function_name == 'web_search':
+                search_term = function_args.get('search_term', '...')
+                console.print(f"[cyan]Web searching for: {search_term}[/cyan]")
+            elif function_name == 'fetch_webpage':
+                urls = function_args.get('urls', [])
+                console.print(f"[cyan]Fetching webpage(s): {', '.join(urls[:3])}{' and more' if len(urls) > 3 else ''}[/cyan]")
+            elif function_name == 'run_terminal_cmd':
+                command = function_args.get('command', '...')
+                console.print(f"[cyan]Running command: {command}[/cyan]")
+            elif function_name == 'delete_file':
+                target_file = function_args.get('target_file', '...')
+                console.print(f"[cyan]Deleting file: {target_file}[/cyan]")
+            elif function_name == 'search_replace':
+                file_path = function_args.get('file_path', '...')
+                console.print(f"[cyan]Search and replace in: {file_path}[/cyan]")
+            elif function_name == 'reapply':
+                target_file = function_args.get('target_file', '...')
+                console.print(f"[cyan]Reapplying edit to: {target_file}[/cyan]")
+            elif function_name == 'search_files':
+                query = function_args.get('query', '...')
+                file_pattern = function_args.get('file_pattern', '*')
+                console.print(f"[cyan]Searching for '{query}' in {file_pattern} files[/cyan]")
+            elif function_name == 'get_errors':
+                file_paths = function_args.get('file_paths', [])
+                console.print(f"[cyan]Checking for errors in {len(file_paths)} file(s)[/cyan]")
+            elif function_name == 'diff_history':
+                console.print(f"[cyan]Retrieving change history[/cyan]")
+            elif function_name == 'add_two_numbers':
+                a = function_args.get('a', '?')
+                b = function_args.get('b', '?')
+                console.print(f"[cyan]Adding {a} + {b}[/cyan]")
+            elif function_name == 'subtract_two_numbers':
+                a = function_args.get('a', '?')
+                b = function_args.get('b', '?')
+                console.print(f"[cyan]Subtracting {a} - {b}[/cyan]")
+            else:
+                console.print(f"[cyan]{function_name}...[/cyan]")
+            
+            # Execute the function
+            if function_name in self.available_functions:
+                function = self.available_functions[function_name]
+                
+                # Check if the function is async
+                if asyncio.iscoroutinefunction(function):
+                    result = await function(**function_args)
+                else:
+                    result = function(**function_args)
+                
+                # Add result to results list
+                results.append(result)
+                
+                # Add tool result to chat
+                llm_client.add_message(
+                    "tool", 
+                    result, 
+                    name=function_name
+                )
             else:
                 error_message = f"Function {function_name} not found"
-                print(error_message)
-                llm_client.add_message("tool", error_message, name=function_name)
-                results.append((function_name, error_message))
+                results.append(error_message)
+                
+                # Add error to chat
+                llm_client.add_message(
+                    "tool", 
+                    error_message, 
+                    name=function_name
+                )
+        
         return results 

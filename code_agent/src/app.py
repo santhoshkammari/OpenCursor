@@ -3,7 +3,8 @@ import os
 import sys
 import asyncio
 import argparse
-from typing import List, Dict, Optional, Set
+import time
+from typing import List, Dict, Optional, Set, Union
 from pathlib import Path
 
 from rich.console import Console
@@ -14,6 +15,15 @@ from rich.prompt import Prompt
 from rich.syntax import Syntax
 from rich import box
 from rich.markdown import Markdown
+
+# Add prompt_toolkit imports
+from prompt_toolkit import PromptSession
+from prompt_toolkit.completion import Completer, Completion, PathCompleter
+from prompt_toolkit.styles import Style
+from prompt_toolkit.formatted_text import HTML
+from prompt_toolkit.history import InMemoryHistory
+from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.shortcuts import CompleteStyle
 
 from code_agent.src.agent import CodeAgent
 
@@ -27,6 +37,123 @@ OPENCURSOR_LOGO = """
  \____/|_|    |______|_| \_|\_____|\____/|_|  \_\_____/ \____/|_|  \_\\
                                                                       
 """
+
+# Custom completers for OpenCursor
+class CommandCompleter(Completer):
+    """Completer for OpenCursor commands"""
+    def __init__(self, commands):
+        self.commands = commands
+    
+    def get_completions(self, document, complete_event):
+        text = document.text_before_cursor
+        
+        # Complete commands that start with /
+        if text.startswith('/'):
+            word = text.lstrip('/')
+            for command in self.commands:
+                cmd = command.lstrip('/')
+                if cmd.startswith(word):
+                    # Return the full command with the / prefix
+                    yield Completion(
+                        text=cmd,
+                        start_position=-len(word),
+                        display=command,  # Show the full command with / in the dropdown
+                        style='class:command'
+                    )
+
+class FileCompleter(Completer):
+    """Completer for file paths with fuzzy matching"""
+    def __init__(self, workspace_root):
+        self.workspace_root = Path(workspace_root)
+        # Cache files to avoid scanning the filesystem on every keystroke
+        self._cached_files = None
+        self._last_cache_time = 0
+    
+    def _get_all_files(self):
+        """Get all files in the workspace with cache support"""
+        current_time = time.time()
+        # Refresh cache every 5 seconds
+        if self._cached_files is None or (current_time - self._last_cache_time) > 5:
+            all_files = []
+            for root, dirs, files in os.walk(self.workspace_root):
+                # Skip hidden directories and __pycache__
+                dirs[:] = [d for d in dirs if not d.startswith('.') and d != '__pycache__']
+                for file in files:
+                    if not file.startswith('.'):
+                        rel_path = os.path.relpath(os.path.join(root, file), self.workspace_root)
+                        all_files.append(rel_path)
+            
+            self._cached_files = all_files
+            self._last_cache_time = current_time
+        
+        return self._cached_files
+    
+    def get_completions(self, document, complete_event):
+        text = document.text_before_cursor
+        
+        # Complete file paths that start with @
+        if text.startswith('@'):
+            path_text = text[1:]  # Remove @ for path completion
+            
+            # Get all files in the workspace
+            all_files = self._get_all_files()
+            
+            # Filter files based on input
+            matches = []
+            for file_path in all_files:
+                # Different matching strategies
+                if not path_text:
+                    # Show all files if no input
+                    matches.append((0, file_path))
+                elif path_text.lower() in file_path.lower():
+                    # Simple substring match
+                    match_pos = file_path.lower().find(path_text.lower())
+                    matches.append((match_pos, file_path))
+                elif all(c.lower() in file_path.lower() for c in path_text):
+                    # Fuzzy match - all characters appear in order
+                    matches.append((100, file_path))  # Lower priority
+            
+            # Sort by match position and then by path length
+            matches.sort(key=lambda x: (x[0], len(x[1])))
+            
+            # Limit results
+            for _, file_path in matches[:20]:
+                yield Completion(
+                    text=file_path,
+                    start_position=-len(path_text),
+                    display=file_path,
+                    style='class:file'
+                )
+
+class OpenCursorCompleter(Completer):
+    """Combined completer for OpenCursor"""
+    def __init__(self, commands, workspace_root):
+        self.command_completer = CommandCompleter(commands)
+        self.file_completer = FileCompleter(workspace_root)
+    
+    def get_completions(self, document, complete_event):
+        text = document.text_before_cursor
+        
+        if text.startswith('/'):
+            # Handle command completions
+            yield from self.command_completer.get_completions(document, complete_event)
+        elif text.startswith('@'):
+            # Handle file completions
+            yield from self.file_completer.get_completions(document, complete_event)
+        elif not text:
+            # If no text yet, suggest both prefixes
+            yield Completion(
+                text='/',
+                start_position=0,
+                display='/ (command)',
+                style='class:command'
+            )
+            yield Completion(
+                text='@',
+                start_position=0,
+                display='@ (file)',
+                style='class:file'
+            )
 
 class OpenCursorApp:
     def __init__(self, model_name: str = "qwen3_14b_q6k:latest", host: str = "http://192.168.170.76:11434", workspace_path: Optional[str] = None):
@@ -49,6 +176,56 @@ class OpenCursorApp:
         
         # Output storage
         self.last_output = ""
+        
+        # Current mode (default is "OpenCursor")
+        self.current_mode = "OpenCursor"
+        
+        # Define prompt styles
+        self.style = Style.from_dict({
+            'command': '#00FFFF bold',  # Cyan for commands
+            'file': '#00FF00',          # Green for files
+            'prompt': '#FFFFFF bold',   # White bold for prompt
+        })
+        
+        # Create key bindings
+        kb = KeyBindings()
+        
+        @kb.add('c-space')
+        def _(event):
+            """Toggle completion or select next completion with Ctrl+Space"""
+            buff = event.app.current_buffer
+            if buff.complete_state:
+                buff.complete_next()
+            else:
+                buff.start_completion(select_first=False)
+        
+        @kb.add('c-n')
+        def _(event):
+            """Navigate to next completion with Ctrl+N"""
+            buff = event.app.current_buffer
+            if buff.complete_state:
+                buff.complete_next()
+        
+        @kb.add('c-p')
+        def _(event):
+            """Navigate to previous completion with Ctrl+P"""
+            buff = event.app.current_buffer
+            if buff.complete_state:
+                buff.complete_previous()
+        
+        # Initialize prompt_toolkit session
+        self.completer = OpenCursorCompleter(self.commands, self.current_workspace)
+        self.history = InMemoryHistory()
+        self.session = PromptSession(
+            history=self.history,
+            style=self.style,
+            completer=self.completer,
+            complete_while_typing=True,
+            complete_in_thread=True,  # Process completions in a separate thread
+            enable_history_search=True,
+            complete_style=CompleteStyle.MULTI_COLUMN,  # Show completions in a dropdown
+            key_bindings=kb
+        )
 
     def print_logo(self):
         """Print the OpenCursor logo"""
@@ -154,11 +331,18 @@ class OpenCursorApp:
         elif command == "/help":
             self.print_help()
         elif command == "/agent":
+            self.console.print("[cyan]Agent working...[/cyan]")
             response = await self.agent(args)
             self.console.print(Panel(response, title="Agent Response", border_style="green"))
             self.last_output = response
+        elif command == "/interactive":
+            self.console.print("[cyan]Interactive mode...[/cyan]")
+            # Interactive mode with the agent
+            response = await self.agent.interactive(args)
+            self.console.print(Panel(response, title="Interactive Response", border_style="yellow"))
+            self.last_output = response
         elif command == "/chat":
-            self.console.print("[yellow]Chatting with LLM...[/yellow]")
+            self.console.print("[cyan]Chatting...[/cyan]")
             # Direct chat with LLM without tools
             response = await self.agent.llm_client.chat(user_message=args, tools=None)
             self.console.print(Panel(response.message.content, title="LLM Response", border_style="blue"))
@@ -199,6 +383,8 @@ class OpenCursorApp:
         self.console.print("[bold green]Welcome to OpenCursor![/bold green] Type [bold]/help[/bold] for available commands.")
         self.console.print("[bold cyan]NEW:[/bold cyan] OpenCursor now features an autonomous agent mode (default) that works step-by-step without user interaction.")
         self.console.print(f"[bold cyan]Using workspace:[/bold cyan] {self.current_workspace}")
+        self.console.print("[bold yellow]TIP:[/bold yellow] Use '/' for command completion and '@' for file path completion")
+        self.console.print("[bold yellow]KEY BINDINGS:[/bold yellow] Ctrl+Space to toggle completions, Ctrl+N/Ctrl+P to navigate completions")
         
         running = True
         while running:
@@ -206,18 +392,46 @@ class OpenCursorApp:
                 # Show files in context
                 self.show_files_in_context()
                 
-                # Get user input
-                user_input = initial_query if initial_query else Prompt.ask("[bold cyan]OpenCursor>[/bold cyan]")
-                initial_query = None  # Reset after first use
+                # Get user input with prompt_toolkit
+                if initial_query:
+                    user_input = initial_query
+                    initial_query = None  # Reset after first use
+                else:
+                    # We need to run this in a separate thread since prompt_toolkit is blocking
+                    prompt_message = f"{self.current_mode}> "
+                    
+                    # Use the prompt_toolkit session directly with proper styling
+                    user_input = await asyncio.to_thread(
+                        lambda: self.session.prompt(
+                            prompt_message,
+                            # Don't override the completer settings that are already in the session
+                        )
+                    )
+                
+                # Handle @ file references
+                if user_input.startswith('@'):
+                    file_path = user_input[1:]
+                    self.add_file_to_context(file_path)
+                    continue
                 
                 # Parse command
                 if user_input.startswith('/'):
                     parts = user_input.split(' ', 1)
                     command = parts[0].lower()
                     args = parts[1] if len(parts) > 1 else ""
+                    
+                    # Update mode based on command
+                    if command == "/agent":
+                        self.current_mode = "Agent"
+                    elif command == "/chat":
+                        self.current_mode = "Chat"
+                    elif command == "/interactive":
+                        self.current_mode = "Interactive"
+                    
                     running = await self.process_command(command, args)
                 else:
                     # Default to autonomous agent if no command specified
+                    self.current_mode = "Agent"
                     response = await self.agent(user_input)
                     self.console.print(Panel(response, title="Agent Response", border_style="green"))
                     self.last_output = response
