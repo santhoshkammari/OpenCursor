@@ -9,12 +9,7 @@ from difflib import unified_diff
 from rich.console import Console
 
 from .llm import LLMClient
-# Import the Playwright search tool
-try:
-    from .tool_playwright_search import register_playwright_search_tool
-except ImportError:
-    # Fallback for direct module import
-    from tool_playwright_search import register_playwright_search_tool
+from .tool_playwright_search import register_playwright_search_tool
 
 
 class Tools:

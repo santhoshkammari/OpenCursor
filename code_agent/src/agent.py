@@ -1,10 +1,12 @@
 import asyncio
 from typing import Dict, Any, List, Tuple, Optional
 
+
 from .llm import LLMClient
 from .tools import Tools
 from .prompts import SYSTEM_PROMPT, AUTONOMOUS_AGENT_PROMPT
-from .register_tools import register_additional_tools
+from .tool_playwright_search import register_playwright_search_tool
+
 
 # Add interactive prompt
 INTERACTIVE_AGENT_PROMPT = """
@@ -65,7 +67,7 @@ class CodeAgent:
         self.tools_manager.register_all_tools()
         
         # Register additional tools
-        register_additional_tools(self.tools_manager)
+        register_playwright_search_tool(self.tools_manager)
 
     async def __call__(self, user_message: str) -> str:
         """
