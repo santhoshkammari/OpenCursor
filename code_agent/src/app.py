@@ -86,7 +86,7 @@ class OpenCursorApp:
     def show_files_in_context(self):
         """Show files currently in context"""
         if not self.files_in_context:
-            self.console.print("[yellow]No files in context[/yellow]")
+            self.console.print("[red]No files in context[/red]")
             return
             
         table = Table(title="Files in Context", box=box.SIMPLE)
@@ -154,14 +154,8 @@ class OpenCursorApp:
         elif command == "/help":
             self.print_help()
         elif command == "/agent":
-            self.console.print("[yellow]Processing with autonomous agent...[/yellow]")
             response = await self.agent(args)
             self.console.print(Panel(response, title="Agent Response", border_style="green"))
-            self.last_output = response
-        elif command == "/interactive":
-            self.console.print("[yellow]Processing with interactive agent...[/yellow]")
-            response = await self.agent(f"/interactive {args}")
-            self.console.print(Panel(response, title="Agent Response", border_style="blue"))
             self.last_output = response
         elif command == "/chat":
             self.console.print("[yellow]Chatting with LLM...[/yellow]")
@@ -224,7 +218,6 @@ class OpenCursorApp:
                     running = await self.process_command(command, args)
                 else:
                     # Default to autonomous agent if no command specified
-                    self.console.print("[yellow]Processing with autonomous agent...[/yellow]")
                     response = await self.agent(user_input)
                     self.console.print(Panel(response, title="Agent Response", border_style="green"))
                     self.last_output = response
@@ -248,7 +241,6 @@ async def main():
     args = parser.parse_args()
     
     console = Console()
-    console.print(f"[bold blue]{OPENCURSOR_LOGO}[/bold blue]")
     console.print("[bold green]Starting OpenCursor...[/bold green]")
     
     # Create and run the app with parsed arguments
