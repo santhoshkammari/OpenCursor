@@ -14,7 +14,7 @@ from rich.syntax import Syntax
 from rich import box
 from rich.markdown import Markdown
 
-from code_agent.agent import CodeAgent
+from src.codeagent.agent import CodeAgent
 
 # ASCII Art for OPENCURSOR
 OPENCURSOR_LOGO = """
@@ -40,7 +40,7 @@ class OpenCursorApp:
         # Available commands
         self.commands = [
             "/agent", "/chat", "/add", "/drop", "/clear", 
-            "/help", "/exit", "/repomap", "/focus"
+            "/help", "/exit", "/repomap", "/focus", "/interactive"
         ]
         
         # Output storage
@@ -56,7 +56,8 @@ class OpenCursorApp:
         table.add_column("Command", style="cyan")
         table.add_column("Description", style="green")
         
-        table.add_row("/agent <message>", "Send a message to the agent (with tools)")
+        table.add_row("/agent <message>", "Send a message to the agent (autonomous mode)")
+        table.add_row("/interactive <message>", "Send a message to the agent (interactive mode)")
         table.add_row("/chat <message>", "Chat with the LLM directly (no tools)")
         table.add_row("/add <filepath>", "Add a file to the chat context")
         table.add_row("/drop <filepath>", "Remove a file from the chat context")
@@ -67,6 +68,16 @@ class OpenCursorApp:
         table.add_row("/exit", "Exit the application")
         
         self.console.print(table)
+        
+        # Add information about agent modes
+        agent_modes = Table(title="Agent Modes", box=box.ROUNDED)
+        agent_modes.add_column("Mode", style="cyan")
+        agent_modes.add_column("Description", style="green")
+        
+        agent_modes.add_row("Autonomous (default)", "Agent works step-by-step without user interaction")
+        agent_modes.add_row("Interactive", "Agent performs one tool call at a time, waiting for user input")
+        
+        self.console.print(agent_modes)
         
     def show_files_in_context(self):
         """Show files currently in context"""
@@ -139,9 +150,14 @@ class OpenCursorApp:
         elif command == "/help":
             self.print_help()
         elif command == "/agent":
-            self.console.print("[yellow]Processing with agent...[/yellow]")
+            self.console.print("[yellow]Processing with autonomous agent...[/yellow]")
             response = await self.agent(args)
             self.console.print(Panel(response, title="Agent Response", border_style="green"))
+            self.last_output = response
+        elif command == "/interactive":
+            self.console.print("[yellow]Processing with interactive agent...[/yellow]")
+            response = await self.agent(f"/interactive {args}")
+            self.console.print(Panel(response, title="Agent Response", border_style="blue"))
             self.last_output = response
         elif command == "/chat":
             self.console.print("[yellow]Chatting with LLM...[/yellow]")
@@ -183,6 +199,7 @@ class OpenCursorApp:
         # Show the logo and welcome message
         self.print_logo()
         self.console.print("[bold green]Welcome to OpenCursor![/bold green] Type [bold]/help[/bold] for available commands.")
+        self.console.print("[bold cyan]NEW:[/bold cyan] OpenCursor now features an autonomous agent mode (default) that works step-by-step without user interaction.")
         
         running = True
         while running:
@@ -200,8 +217,8 @@ class OpenCursorApp:
                     args = parts[1] if len(parts) > 1 else ""
                     running = await self.process_command(command, args)
                 else:
-                    # Default to agent if no command specified
-                    self.console.print("[yellow]Processing with agent...[/yellow]")
+                    # Default to autonomous agent if no command specified
+                    self.console.print("[yellow]Processing with autonomous agent...[/yellow]")
                     response = await self.agent(user_input)
                     self.console.print(Panel(response, title="Agent Response", border_style="green"))
                     self.last_output = response

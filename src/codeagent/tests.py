@@ -1,5 +1,5 @@
 import asyncio
-from code_agent.agent import CodeAgent
+from src.codeagent.agent import CodeAgent
 
 
 async def demo():
