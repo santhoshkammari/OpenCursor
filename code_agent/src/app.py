@@ -2,6 +2,7 @@
 import os
 import sys
 import asyncio
+import argparse
 from typing import List, Dict, Optional, Set
 from pathlib import Path
 
@@ -28,14 +29,17 @@ OPENCURSOR_LOGO = """
 """
 
 class OpenCursorApp:
-    def __init__(self, model_name: str = "qwen3_14b_q6k:latest", host: str = "http://192.168.170.76:11434"):
-        self.agent = CodeAgent(model_name=model_name, host=host)
+    def __init__(self, model_name: str = "qwen3_14b_q6k:latest", host: str = "http://192.168.170.76:11434", workspace_path: Optional[str] = None):
+        # Use provided workspace path or current working directory
+        self.current_workspace = Path(workspace_path).resolve() if workspace_path else Path.cwd()
+        
+        # Initialize agent with current workspace
+        self.agent = CodeAgent(model_name=model_name, host=host, workspace_root=str(self.current_workspace))
         self.console = Console()
         
         # Chat context management
         self.files_in_context: Set[Path] = set()
         self.chat_history: List[Dict[str, str]] = []
-        self.current_workspace = Path.cwd()
         
         # Available commands
         self.commands = [
@@ -194,12 +198,13 @@ class OpenCursorApp:
         
         return True
     
-    async def run(self):
+    async def run(self, initial_query: Optional[str] = None):
         """Run the application"""
         # Show the logo and welcome message
         self.print_logo()
         self.console.print("[bold green]Welcome to OpenCursor![/bold green] Type [bold]/help[/bold] for available commands.")
         self.console.print("[bold cyan]NEW:[/bold cyan] OpenCursor now features an autonomous agent mode (default) that works step-by-step without user interaction.")
+        self.console.print(f"[bold cyan]Using workspace:[/bold cyan] {self.current_workspace}")
         
         running = True
         while running:
@@ -208,7 +213,8 @@ class OpenCursorApp:
                 self.show_files_in_context()
                 
                 # Get user input
-                user_input = Prompt.ask("[bold cyan]OpenCursor>[/bold cyan]")
+                user_input = initial_query if initial_query else Prompt.ask("[bold cyan]OpenCursor>[/bold cyan]")
+                initial_query = None  # Reset after first use
                 
                 # Parse command
                 if user_input.startswith('/'):
@@ -233,17 +239,25 @@ class OpenCursorApp:
 
 async def main():
     """Main entry point"""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="OpenCursor - An AI-powered code assistant")
+    parser.add_argument("-m", "--model", default="qwen3_14b_q6k:latest", help="Model name to use")
+    parser.add_argument("--host", default="http://192.168.170.76:11434", help="Ollama host URL")
+    parser.add_argument("-w", "--workspace", help="Path to workspace directory")
+    parser.add_argument("-q", "--query", default=None, help="Initial query to process")
+    args = parser.parse_args()
+    
     console = Console()
     console.print(f"[bold blue]{OPENCURSOR_LOGO}[/bold blue]")
     console.print("[bold green]Starting OpenCursor...[/bold green]")
     
-    # Parse command line arguments for model and host
-    model_name = "qwen3_14b_q6k:latest"
-    host = "http://192.168.170.76:11434"
-    
-    # Create and run the app
-    app = OpenCursorApp(model_name=model_name, host=host)
-    await app.run()
+    # Create and run the app with parsed arguments
+    app = OpenCursorApp(
+        model_name=args.model,
+        host=args.host,
+        workspace_path=args.workspace
+    )
+    await app.run(initial_query=args.query)
 
 if __name__ == "__main__":
     try:

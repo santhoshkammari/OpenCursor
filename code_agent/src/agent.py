@@ -7,18 +7,19 @@ from .prompts import SYSTEM_PROMPT, AUTONOMOUS_AGENT_PROMPT
 
 
 class CodeAgent:
-    def __init__(self, model_name: str = "qwen3_14b_q6k:latest", host: str = "http://192.168.170.76:11434"):
+    def __init__(self, model_name: str = "qwen3_14b_q6k:latest", host: str = "http://192.168.170.76:11434", workspace_root: str = None):
         """
         Initialize a CodeAgent that can use tools and execute tool calls.
 
         Args:
             model_name (str): The name of the Ollama model to use.
             host (str): The host URL for the Ollama API.
+            workspace_root (str): The root directory of the workspace.
         """
         self.llm_client = LLMClient(model_name=model_name, host=host)
-        self.tools_manager = Tools()
+        self.tools_manager = Tools(workspace_root=workspace_root)
         self.register_tools()
-        self.max_iterations = 10
+        self.max_iterations = 25
 
     def register_tools(self):
         """Register all available tools."""

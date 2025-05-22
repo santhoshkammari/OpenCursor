@@ -1,0 +1,1 @@
+python -m code_agent.src.app -w /home/ntlpt59/MAIN/Personal/OpenCursor/code_agent/tests/TestEnvironment/sample -q "read add.py file"

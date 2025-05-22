@@ -3,7 +3,9 @@ import os
 import re
 import json
 import aiohttp
+import subprocess
 from typing import Callable, Dict, Any, Optional
+from difflib import unified_diff
 
 
 
@@ -66,6 +68,51 @@ class Tools:
                         schema['function']['parameters']['required'].append(param_name)
             
             self.tools.append(schema)
+
+    def run_git_diff(self, file_path: str) -> str:
+        """
+        Run git diff for a specific file to show changes.
+        
+        Args:
+            file_path (str): Path to the file
+            
+        Returns:
+            str: Git diff output or error message
+        """
+        try:
+            # Check if file is in a git repository
+            result = subprocess.run(
+                ['git', 'ls-files', '--error-unmatch', file_path], 
+                cwd=self.workspace_root,
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False
+            )
+            
+            if result.returncode != 0:
+                # File is not tracked by git
+                return "File is not tracked by git."
+            
+            # Run git diff
+            diff_result = subprocess.run(
+                ['git', 'diff', file_path], 
+                cwd=self.workspace_root,
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False
+            )
+            
+            if diff_result.returncode != 0:
+                return f"Error running git diff: {diff_result.stderr}"
+            
+            if not diff_result.stdout.strip():
+                return "No changes detected by git."
+            
+            return diff_result.stdout
+        except Exception as e:
+            return f"Error running git diff: {str(e)}"
 
     def register_file_tools(self):
         """Register file operation tools."""
@@ -131,6 +178,9 @@ class Tools:
                 # Check if file exists
                 file_exists = os.path.isfile(file_path)
                 
+                # Record git state before edit
+                before_git_state = self.run_git_diff(file_path) if file_exists else ""
+                
                 if file_exists:
                     # Read existing content
                     with open(file_path, 'r', encoding='utf-8') as f:
@@ -141,14 +191,38 @@ class Tools:
                     new_content = code_edit
                 else:
                     # Create new file
+                    existing_content = ""
                     new_content = code_edit
                 
                 # Write the file
                 with open(file_path, 'w', encoding='utf-8') as f:
                     f.write(new_content)
                 
+                # Get git diff after edit
+                after_git_state = self.run_git_diff(file_path)
+                
                 action = "Updated" if file_exists else "Created"
-                return f"{action} file: {target_file}\nInstructions applied: {instructions}"
+                result = f"{action} file: {target_file}\nInstructions applied: {instructions}"
+                
+                # Add git diff if available and changed
+                if after_git_state and after_git_state != "No changes detected by git." and after_git_state != "File is not tracked by git.":
+                    result += f"\n\n[Git Diff]\n{after_git_state}"
+                else:
+                    # If git diff is not available, show a simple diff
+                    if existing_content != new_content:
+                        result += "\n\n[Changes Made]\n"
+                        # Show a simple line-by-line diff of changes
+                        diff = unified_diff(
+                            existing_content.splitlines(keepends=True),
+                            new_content.splitlines(keepends=True),
+                            fromfile=f'a/{target_file}',
+                            tofile=f'b/{target_file}'
+                        )
+                        diff_text = ''.join(diff)
+                        if diff_text:
+                            result += diff_text
+                
+                return result
                 
             except Exception as e:
                 return f"Error editing file: {str(e)}"
@@ -179,6 +253,11 @@ class Tools:
                 return "\n".join(result)
             except Exception as e:
                 return f"Error listing directory: {str(e)}"
+        
+        # Register file tools
+        self.register_function(read_file)
+        self.register_function(edit_file)
+        self.register_function(list_dir)
         
         def search_files(query: str, file_pattern: str = "*") -> str:
             """
@@ -266,14 +345,39 @@ class Tools:
                 occurrences = content.count(old_string)
                 if occurrences > 1:
                     return f"Error: Found {occurrences} occurrences of the text. Please provide more context to make the match unique."
-                    
+                
+                # Record git state before edit
+                before_git_state = self.run_git_diff(file_path)
+                
                 # Replace the text
                 new_content = content.replace(old_string, new_string)
                 
                 with open(full_path, 'w', encoding='utf-8') as f:
                     f.write(new_content)
-                    
-                return f"Successfully replaced text in {file_path}"
+                
+                # Get git diff after edit
+                after_git_state = self.run_git_diff(file_path)
+                
+                result = f"Successfully replaced text in {file_path}"
+                
+                # Add git diff if available and changed
+                if after_git_state and after_git_state != "No changes detected by git." and after_git_state != "File is not tracked by git.":
+                    result += f"\n\n[Git Diff]\n{after_git_state}"
+                else:
+                    # If git diff is not available, show a simple diff
+                    result += "\n\n[Changes Made]\n"
+                    # Show a simple line-by-line diff of changes
+                    diff = unified_diff(
+                        content.splitlines(keepends=True),
+                        new_content.splitlines(keepends=True),
+                        fromfile=f'a/{file_path}',
+                        tofile=f'b/{file_path}'
+                    )
+                    diff_text = ''.join(diff)
+                    if diff_text:
+                        result += diff_text
+                
+                return result
                 
             except Exception as e:
                 return f"Error performing search and replace: {str(e)}"
@@ -301,11 +405,13 @@ class Tools:
                 str: Command output
             """
             try:
+                # Use the workspace_root as the cwd for command execution
                 process = await asyncio.create_subprocess_shell(
                     command,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
-                    shell=True
+                    shell=True,
+                    cwd=self.workspace_root  # Set the working directory to workspace_root
                 )
                 
                 if is_background:
