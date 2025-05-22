@@ -31,7 +31,9 @@ You have access to various tools like:
 1. File operations: read_file, edit_file, list_dir, search_files, delete_file
 2. Terminal: run_terminal_cmd
 3. Code analysis: semantic_search, grep_search, file_search
-4. Web tools: web_search, fetch_webpage
+4. Web tools: web_search_playwright (preferred), web_search (fallback), fetch_webpage
+
+Prefer using web_search_playwright for web searches as it provides more reliable results. Only use the regular web_search tool if web_search_playwright fails or doesn't find the best results.
 
 Use these tools to help the user with their coding tasks. Don't mention the tool names directly to the user.
 </tools>
@@ -76,7 +78,8 @@ You MUST NOT ask the user for clarification or additional input during execution
    - run_terminal_cmd(command, is_background) - Run a terminal command
 
 4. Web tools:
-   - web_search(search_term) - Search the web
+   - web_search_playwright(search_term, search_provider) - Search the web using Playwright (preferred)
+   - web_search(search_term) - Search the web (fallback if Playwright search fails)
    - fetch_webpage(urls, query) - Fetch contents from web pages
 </available_tools>
 

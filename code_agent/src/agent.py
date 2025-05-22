@@ -4,6 +4,7 @@ from typing import Dict, Any, List, Tuple, Optional
 from .llm import LLMClient
 from .tools import Tools
 from .prompts import SYSTEM_PROMPT, AUTONOMOUS_AGENT_PROMPT
+from .register_tools import register_additional_tools
 
 # Add interactive prompt
 INTERACTIVE_AGENT_PROMPT = """
@@ -37,7 +38,8 @@ You are an interactive AI coding agent that works step-by-step with the user. Yo
    - run_terminal_cmd(command, is_background) - Run a terminal command
 
 4. Web tools:
-   - web_search(search_term) - Search the web
+   - web_search_playwright(search_term, search_provider) - Search the web using Playwright (preferred)
+   - web_search(search_term) - Search the web (fallback if Playwright search fails)
    - fetch_webpage(urls, query) - Fetch contents from web pages
 </available_tools>
 """
@@ -61,6 +63,9 @@ class CodeAgent:
         """Register all available tools."""
         # Use the convenient method to register all tools
         self.tools_manager.register_all_tools()
+        
+        # Register additional tools
+        register_additional_tools(self.tools_manager)
 
     async def __call__(self, user_message: str) -> str:
         """

@@ -8,6 +8,14 @@ from typing import Callable, Dict, Any, Optional
 from difflib import unified_diff
 from rich.console import Console
 
+from .llm import LLMClient
+# Import the Playwright search tool
+try:
+    from .tool_playwright_search import register_playwright_search_tool
+except ImportError:
+    # Fallback for direct module import
+    from tool_playwright_search import register_playwright_search_tool
+
 
 class Tools:
     def __init__(self, workspace_root: str = None):
@@ -15,6 +23,71 @@ class Tools:
         self.workspace_root = workspace_root or os.getcwd()
         self.available_functions = {}
         self.tools = []
+
+    async def process_tool_calls(self, tool_calls, llm_client:LLMClient):
+        """
+        Process tool calls from the LLM.
+        
+        Args:
+            tool_calls (list): List of tool calls from the LLM
+            llm_client: The LLM client to add tool results to
+            
+        Returns:
+            list: Results of the tool calls
+        """
+        results = []
+        for tool_call in tool_calls:
+            function_name = tool_call['function']['name']
+            function_args = tool_call['function']['arguments']
+            
+            # Get the function
+            if function_name in self.available_functions:
+                function = self.available_functions[function_name]
+                
+                try:
+                    # Check if the function is async
+                    if asyncio.iscoroutinefunction(function):
+                        result = await function(**function_args)
+                    else:
+                        result = function(**function_args)
+                        
+                    # Add the result to the LLM client
+                    llm_client.add_message(role="tool", content=result, name=function_name)
+                    results.append(result)
+                except Exception as e:
+                    error_message = f"Error executing {function_name}: {str(e)}"
+                    llm_client.add_message(role="tool", content=error_message, name=function_name)
+                    results.append(error_message)
+            else:
+                error_message = f"Function {function_name} not found"
+                llm_client.add_message(role="tool", content=error_message, name=function_name)
+                results.append(error_message)
+        
+        return results
+
+    def register_all_tools(self):
+        """
+        Register all available tools for use with the LLM.
+        This is a convenience method to register all tool categories at once.
+        """
+        # File operations
+        self.register_file_tools()
+        
+        # Terminal operations
+        self.register_terminal_tools()
+        
+        # Semantic understanding
+        self.register_semantic_tools()
+        
+        # Math tools
+        self.register_math_tools()
+        
+        # Note: Additional tools like web_search_playwright are registered
+        # separately in the agent.py file using register_additional_tools
+        
+        print(f"Registered {len(self.tools)} tools for use with LLM.")
+        
+        return self.tools
 
     def register_function(self, func: Callable, custom_schema: Optional[Dict[str, Any]] = None):
         """
@@ -750,495 +823,18 @@ class Tools:
                                     context_end = min(len(lines), i + 3)
                                     
                                     context = ''.join(lines[context_start:context_end])
-                                    results.append(f"File: {rel_path}, Line {i+1}\n```\n{context}```\n")
-                    except:
+                                    results.append(f"File: {rel_path}, Line {i+1}\n```\n{context}\n```")
+                    except Exception as e:
                         # Skip files we can't read
                         pass
                 
-                if results:
-                    return "\n".join(results[:10])  # Limit to top 10 results
-                else:
-                    return f"No usages found for '{symbol_name}'"
-                    
+                return "\n".join(results) if results else f"No usages found for symbol '{symbol_name}'"
+                
             except Exception as e:
-                return f"Error finding code usages: {str(e)}"
-        
-        # Register semantic tools
+                return f"Error finding usages: {str(e)}"
+
+        # Register the functions
         self.register_function(semantic_search)
-        self.register_function(list_code_usages)
         self.register_function(codebase_search)
         self.register_function(reapply)
-    
-    def register_web_tools(self):
-        """Register web search and web fetching tools."""
-        
-        async def web_search(search_term: str, show_descriptions: bool = True, explanation: str = "") -> str:
-            """
-            Search the web for real-time information using Google Search.
-            
-            Args:
-                search_term (str): The search query
-                show_descriptions (bool): Whether to include result descriptions or just URLs
-                explanation (str): Explanation for why the search is being performed
-                
-            Returns:
-                str: Search results with relevant snippets and URLs
-            """
-            try:
-                from googlesearch import search
-                
-                results = []
-                
-                # Get the top 5 search results
-                search_results = list(search(search_term, num_results=5))
-                
-                if show_descriptions:
-                    # If we need descriptions, use the SearchResult objects
-                    search_results_with_desc = list(search(search_term, num_results=5, advanced=True))
-                    
-                    for i, result in enumerate(search_results_with_desc):
-                        results.append(f"{i+1}. {result.title}")
-                        results.append(f"   URL: {result.url}")
-                        if result.description:
-                            results.append(f"   Description: {result.description}")
-                        results.append("")
-                else:
-                    # Just return the URLs
-                    for i, url in enumerate(search_results):
-                        results.append(f"{i+1}. {url}")
-                
-                if not results:
-                    results.append(f"No search results found for '{search_term}'.")
-                    results.append("Try a different search term or check your internet connection.")
-                
-                return "\n".join(results)
-            except Exception as e:
-                # Provide a helpful fallback in case of API issues
-                return f"Error during web search: {str(e)}\n\n" + \
-                       f"Web search was attempted for: {search_term}\n" + \
-                       "To get this information, you could:\n" + \
-                       "1. Search on Google or other search engines\n" + \
-                       "2. Check official documentation or websites\n" + \
-                       "3. Look for related information in technical forums"
-        
-        async def fetch_webpage(urls: list, query: str = None) -> str:
-            """
-            Fetch contents from web pages.
-            
-            Args:
-                urls (list): List of URLs to fetch
-                query (str): Optional query to filter content
-                
-            Returns:
-                str: Webpage contents (simulated)
-            """
-            # This is a stub implementation
-            # In a real implementation, you would use HTTP requests to fetch webpage content
-            results = []
-            
-            for url in urls:
-                results.append(f"Simulated content from {url}:\n\n" + 
-                               "This is simulated webpage content.\n" +
-                               "In a real implementation, the actual webpage would be fetched and parsed.\n")
-            
-            return "\n\n".join(results)
-        
-        # Register web tools as async functions
-        self.available_functions["web_search"] = web_search
-        self.available_functions["fetch_webpage"] = fetch_webpage
-        
-        # Create schemas manually
-        web_search_schema = {
-            'type': 'function',
-            'function': {
-                'name': 'web_search',
-                'description': 'Search the web for real-time information about any topic. Use this tool when you need up-to-date information that might not be available in your training data, or when you need to verify current facts. The search results will include relevant snippets and URLs from web pages. This is particularly useful for questions about current events, technology updates, or any topic that requires recent information.',
-                'parameters': {
-                    'type': 'object',
-                    'required': ['search_term'],
-                    'properties': {
-                        'search_term': {
-                            'type': 'string',
-                            'description': 'The search term to look up on the web. Be specific and include relevant keywords for better results. For technical queries, include version numbers or dates if relevant.'
-                        },
-                        'show_descriptions': {
-                            'type': 'boolean',
-                            'description': 'Whether to include descriptions of search results or just URLs. Default is true.'
-                        },
-                        'explanation': {
-                            'type': 'string',
-                            'description': 'One sentence explanation as to why this tool is being used, and how it contributes to the goal.'
-                        }
-                    }
-                }
-            }
-        }
-        
-        fetch_webpage_schema = {
-            'type': 'function',
-            'function': {
-                'name': 'fetch_webpage',
-                'description': 'Fetch contents from web pages',
-                'parameters': {
-                    'type': 'object',
-                    'required': ['urls'],
-                    'properties': {
-                        'urls': {
-                            'type': 'array',
-                            'items': {'type': 'string'},
-                            'description': 'List of URLs to fetch'
-                        },
-                        'query': {
-                            'type': 'string',
-                            'description': 'Optional query to filter content'
-                        }
-                    }
-                }
-            }
-        }
-        
-        self.tools.append(web_search_schema)
-        self.tools.append(fetch_webpage_schema)
-    
-    def register_code_analysis_tools(self):
-        """Register code analysis tools."""
-        
-        def file_search(query: str, explanation: str = "") -> str:
-            """
-            Search for files by name pattern (fuzzy search).
-            
-            Args:
-                query (str): The filename pattern to search for
-                explanation (str): Explanation for why the search is being performed
-                
-            Returns:
-                str: Matching files
-            """
-            results = []
-            
-            try:
-                for root, dirs, files in os.walk(self.workspace_root):
-                    for file in files:
-                        # Simple fuzzy matching
-                        if query.lower() in file.lower():
-                            file_path = os.path.join(root, file)
-                            rel_path = os.path.relpath(file_path, self.workspace_root)
-                            results.append(rel_path)
-                
-                if results:
-                    # Sort by relevance (exact matches first)
-                    results.sort(key=lambda x: 0 if query.lower() == os.path.basename(x).lower() else 1)
-                    return "Matching files:\n" + "\n".join(results[:10])  # Limit to 10 results
-                else:
-                    return f"No files matching '{query}' found"
-                    
-            except Exception as e:
-                return f"Error searching for files: {str(e)}"
-        
-        def grep_search(query: str, include_pattern: str = None, exclude_pattern: str = None, 
-                       case_sensitive: bool = False, explanation: str = "") -> str:
-            """
-            Search for text patterns in files (regex supported).
-            
-            Args:
-                query (str): The text pattern to search for
-                include_pattern (str): Optional glob pattern to filter files to include
-                exclude_pattern (str): Optional glob pattern to filter files to exclude
-                case_sensitive (bool): Whether the search should be case sensitive
-                explanation (str): Explanation for why the search is being performed
-                
-            Returns:
-                str: Matching lines
-            """
-            results = []
-            
-            try:
-                import fnmatch
-                
-                for root, dirs, files in os.walk(self.workspace_root):
-                    # Skip hidden directories and common binary directories
-                    dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ['node_modules', 'dist']]
-                    
-                    for file in files:
-                        # Skip binary files and large files
-                        if file.endswith(('.exe', '.bin', '.obj', '.dll', '.so', '.pyc', '.pyo')):
-                            continue
-                            
-                        file_path = os.path.join(root, file)
-                        rel_path = os.path.relpath(file_path, self.workspace_root)
-                        
-                        # Check include pattern if provided
-                        if include_pattern and not fnmatch.fnmatch(rel_path, include_pattern):
-                            continue
-                            
-                        # Check exclude pattern if provided
-                        if exclude_pattern and fnmatch.fnmatch(rel_path, exclude_pattern):
-                            continue
-                        
-                        try:
-                            # Check if file is too large
-                            if os.path.getsize(file_path) > 1024 * 1024:  # Skip files > 1MB
-                                continue
-                                
-                            with open(file_path, 'r', encoding='utf-8') as f:
-                                lines = f.readlines()
-                            
-                            for i, line in enumerate(lines):
-                                line_to_check = line if case_sensitive else line.lower()
-                                query_to_check = query if case_sensitive else query.lower()
-                                
-                                try:
-                                    # Try regex first
-                                    if re.search(query_to_check, line_to_check):
-                                        results.append(f"{rel_path}:{i+1}: {line.strip()}")
-                                except re.error:
-                                    # If regex fails, do a simple string search
-                                    if query_to_check in line_to_check:
-                                        results.append(f"{rel_path}:{i+1}: {line.strip()}")
-                        except:
-                            # Skip files we can't read
-                            pass
-                
-                if results:
-                    return "\n".join(results[:50])  # Limit to 50 results
-                else:
-                    return f"No matches found for '{query}'"
-                    
-            except Exception as e:
-                return f"Error during grep search: {str(e)}"
-        
-        def get_errors(file_paths: list) -> str:
-            """
-            Get any compile or lint errors in code files.
-            
-            Args:
-                file_paths (list): List of files to check for errors
-                
-            Returns:
-                str: Error messages if any
-            """
-            # This is a stub implementation
-            # In a real implementation, you would run linters or compilers
-            
-            return "No errors found in the specified files.\n\n" + \
-                   "Note: This is a simulated response. For actual error checking, implement integration with linters or compilers."
-        
-        def diff_history(self, explanation: str = None) -> str:
-            """
-            Retrieve the history of recent changes made to files in the workspace.
-            
-            Args:
-                explanation (str, optional): Explanation for why the tool is being used
-                
-            Returns:
-                str: Recent file modifications with timestamps and line changes
-            """
-            try:
-                # Execute git diff command if git repo exists
-                import subprocess
-                
-                # Try to get git history
-                try:
-                    # Check if git repo exists
-                    subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], 
-                                cwd=self.workspace_root, 
-                                check=True, 
-                                stdout=subprocess.PIPE, 
-                                stderr=subprocess.PIPE)
-                    
-                    # Get recent commits
-                    git_log = subprocess.run(
-                        ["git", "log", "--stat", "-5", "--oneline"],
-                        cwd=self.workspace_root,
-                        check=True,
-                        capture_output=True,
-                        text=True
-                    )
-                    
-                    if git_log.stdout:
-                        return f"Recent git history:\n{git_log.stdout}"
-                except:
-                    pass  # Not a git repo or git not available
-                
-                # Fallback: List recently modified files
-                import os
-                import time
-                
-                files_with_times = []
-                for root, dirs, files in os.walk(self.workspace_root):
-                    for file in files:
-                        if file.startswith('.') or file.endswith(('.pyc', '.exe', '.bin')):
-                            continue
-                        
-                        file_path = os.path.join(root, file)
-                        rel_path = os.path.relpath(file_path, self.workspace_root)
-                        
-                        try:
-                            mtime = os.path.getmtime(file_path)
-                            size = os.path.getsize(file_path)
-                            files_with_times.append((rel_path, mtime, size))
-                        except:
-                            pass
-                
-                # Sort by modification time, newest first
-                files_with_times.sort(key=lambda x: x[1], reverse=True)
-                
-                result = "Recent file modifications:\n"
-                for file_path, mtime, size in files_with_times[:10]:  # Show 10 most recent
-                    modified_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(mtime))
-                    result += f"{modified_time} - {file_path} ({size} bytes)\n"
-                
-                return result
-                    
-            except Exception as e:
-                return f"Error retrieving diff history: {str(e)}"
-
-        # Register code analysis tools
-        self.register_function(file_search)
-        self.register_function(grep_search)
-        self.register_function(get_errors)
-        self.register_function(diff_history)
-
-    def register_all_tools(self):
-        """
-        Register all available tools for use with the LLM.
-        This is a convenience method to register all tool categories at once.
-        """
-        # File operations
-        self.register_file_tools()
-        
-        # Terminal operations
-        self.register_terminal_tools()
-        
-        # Code analysis
-        self.register_code_analysis_tools()
-        
-        # Semantic understanding
-        self.register_semantic_tools()
-        
-        # Web tools
-        self.register_web_tools()
-        
-        # Math tools
-        self.register_math_tools()
-        
-        print(f"Registered {len(self.tools)} tools for use with LLM.")
-        
-        return self.tools
-
-    async def process_tool_calls(self, tool_calls: list, llm_client) -> list:
-        """
-        Process tool calls from the LLM and add the results to the chat.
-
-        Args:
-            tool_calls (list): List of tool calls from the LLM.
-            llm_client: The LLM client to add results to.
-
-        Returns:
-            list: Results from the tool calls.
-        """
-        console = Console()
-        
-        results = []
-        for tool_call in tool_calls:
-            function_name = tool_call['function']['name']
-            function_args = tool_call['function']['arguments']
-            
-            # Check if there's an explanation and print it if available
-            if isinstance(function_args, dict) and 'explanation' in function_args and function_args['explanation']:
-                console.print(function_args['explanation'])
-            
-            # Display simplified tool call message
-            if function_name == 'read_file':
-                target_file = function_args.get('target_file', '...')
-                console.print(f"[cyan]Reading {target_file}[/cyan]")
-            elif function_name == 'list_dir':
-                directory = function_args.get('relative_workspace_path', '.')
-                console.print(f"[cyan]Listing directory {directory}[/cyan]")
-            elif function_name == 'edit_file':
-                target_file = function_args.get('target_file', '...')
-                console.print(f"[cyan]Editing {target_file}[/cyan]")
-            elif function_name == 'grep_search':
-                query = function_args.get('query', '...')
-                console.print(f"[cyan]Searching code for: {query}[/cyan]")
-            elif function_name == 'file_search':
-                query = function_args.get('query', '...')
-                console.print(f"[cyan]Finding files matching: {query}[/cyan]")
-            elif function_name == 'codebase_search':
-                query = function_args.get('query', '...')
-                console.print(f"[cyan]Semantic search for: {query}[/cyan]")
-            elif function_name == 'semantic_search':
-                query = function_args.get('query', '...')
-                console.print(f"[cyan]Semantic search for: {query}[/cyan]")
-            elif function_name == 'list_code_usages':
-                symbol_name = function_args.get('symbol_name', '...')
-                console.print(f"[cyan]Finding usages of: {symbol_name}[/cyan]")
-            elif function_name == 'web_search':
-                search_term = function_args.get('search_term', '...')
-                console.print(f"[cyan]Web searching for: {search_term}[/cyan]")
-            elif function_name == 'fetch_webpage':
-                urls = function_args.get('urls', [])
-                console.print(f"[cyan]Fetching webpage(s): {', '.join(urls[:3])}{' and more' if len(urls) > 3 else ''}[/cyan]")
-            elif function_name == 'run_terminal_cmd':
-                command = function_args.get('command', '...')
-                console.print(f"[cyan]Running command: {command}[/cyan]")
-            elif function_name == 'delete_file':
-                target_file = function_args.get('target_file', '...')
-                console.print(f"[cyan]Deleting file: {target_file}[/cyan]")
-            elif function_name == 'search_replace':
-                file_path = function_args.get('file_path', '...')
-                console.print(f"[cyan]Search and replace in: {file_path}[/cyan]")
-            elif function_name == 'reapply':
-                target_file = function_args.get('target_file', '...')
-                console.print(f"[cyan]Reapplying edit to: {target_file}[/cyan]")
-            elif function_name == 'search_files':
-                query = function_args.get('query', '...')
-                file_pattern = function_args.get('file_pattern', '*')
-                console.print(f"[cyan]Searching for '{query}' in {file_pattern} files[/cyan]")
-            elif function_name == 'get_errors':
-                file_paths = function_args.get('file_paths', [])
-                console.print(f"[cyan]Checking for errors in {len(file_paths)} file(s)[/cyan]")
-            elif function_name == 'diff_history':
-                console.print(f"[cyan]Retrieving change history[/cyan]")
-            elif function_name == 'add_two_numbers':
-                a = function_args.get('a', '?')
-                b = function_args.get('b', '?')
-                console.print(f"[cyan]Adding {a} + {b}[/cyan]")
-            elif function_name == 'subtract_two_numbers':
-                a = function_args.get('a', '?')
-                b = function_args.get('b', '?')
-                console.print(f"[cyan]Subtracting {a} - {b}[/cyan]")
-            else:
-                console.print(f"[cyan]{function_name}...[/cyan]")
-            
-            # Execute the function
-            if function_name in self.available_functions:
-                function = self.available_functions[function_name]
-                
-                # Check if the function is async
-                if asyncio.iscoroutinefunction(function):
-                    result = await function(**function_args)
-                else:
-                    result = function(**function_args)
-                
-                # Add result to results list
-                results.append(result)
-                
-                # Add tool result to chat
-                llm_client.add_message(
-                    "tool", 
-                    result, 
-                    name=function_name
-                )
-            else:
-                error_message = f"Function {function_name} not found"
-                results.append(error_message)
-                
-                # Add error to chat
-                llm_client.add_message(
-                    "tool", 
-                    error_message, 
-                    name=function_name
-                )
-        
-        return results 
+        self.register_function(list_code_usages)
