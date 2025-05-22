@@ -1,9 +1,9 @@
 import asyncio
 from typing import Dict, Any, List, Tuple, Optional
 
-from src.codeagent.llm import LLMClient
-from src.codeagent.tools import Tools
-from src.codeagent.prompts import SYSTEM_PROMPT, AUTONOMOUS_AGENT_PROMPT
+from .llm import LLMClient
+from .tools import Tools
+from .prompts import SYSTEM_PROMPT, AUTONOMOUS_AGENT_PROMPT
 
 
 class CodeAgent:
@@ -22,12 +22,8 @@ class CodeAgent:
 
     def register_tools(self):
         """Register all available tools."""
-        self.tools_manager.register_file_tools()
-        self.tools_manager.register_terminal_tools()
-        self.tools_manager.register_math_tools()
-        self.tools_manager.register_semantic_tools()
-        self.tools_manager.register_web_tools()
-        self.tools_manager.register_code_analysis_tools()
+        # Use the convenient method to register all tools
+        self.tools_manager.register_all_tools()
 
     async def __call__(self, user_message: str) -> str:
         """

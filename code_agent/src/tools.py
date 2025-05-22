@@ -70,14 +70,15 @@ class Tools:
     def register_file_tools(self):
         """Register file operation tools."""
         
-        def read_file(target_file: str, start_line: int = 1, end_line: int = None) -> str:
+        def read_file(target_file: str, offset: int = 0, limit: int = None, should_read_entire_file: bool = False) -> str:
             """
             Read the contents of a file.
             
             Args:
                 target_file (str): Path to the file to read
-                start_line (int): Line to start reading from (1-indexed)
-                end_line (int): Line to end reading at (1-indexed, inclusive)
+                offset (int): Line to start reading from (0-indexed)
+                limit (int): Maximum number of lines to read
+                should_read_entire_file (bool): Whether to read the entire file ignoring offset and limit
                 
             Returns:
                 str: The file contents
@@ -86,23 +87,37 @@ class Tools:
             
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
+                    if should_read_entire_file:
+                        return f.read()
+                    
                     lines = f.readlines()
                 
-                # Adjust for 1-indexing
-                start_idx = max(0, start_line - 1)
-                end_idx = len(lines) if end_line is None else min(end_line, len(lines))
+                # Apply offset and limit
+                start_idx = max(0, offset)
+                end_idx = len(lines) if limit is None else min(start_idx + limit, len(lines))
                 
-                return ''.join(lines[start_idx:end_idx])
+                # Include summary of lines outside the range
+                result = []
+                if start_idx > 0:
+                    result.append(f"[Lines 1-{start_idx} omitted]")
+                
+                result.append(''.join(lines[start_idx:end_idx]))
+                
+                if end_idx < len(lines):
+                    result.append(f"[Lines {end_idx+1}-{len(lines)} omitted]")
+                
+                return '\n'.join(result)
             except Exception as e:
                 return f"Error reading file: {str(e)}"
         
-        def edit_file(target_file: str, code_edit: str) -> str:
+        def edit_file(target_file: str, code_edit: str, instructions: str = "") -> str:
             """
             Edit a file with the specified code changes.
             
             Args:
                 target_file (str): Path to the file to edit
                 code_edit (str): The code edits to apply
+                instructions (str): Instructions for applying the edit
                 
             Returns:
                 str: Result of the operation
@@ -121,8 +136,8 @@ class Tools:
                     with open(file_path, 'r', encoding='utf-8') as f:
                         existing_content = f.read()
                     
-                    # Apply edits - this is a simplified implementation
-                    # In a real system, you'd need more sophisticated diff handling
+                    # Here we would apply a more sophisticated diff algorithm
+                    # For now, we'll just replace the entire content
                     new_content = code_edit
                 else:
                     # Create new file
@@ -133,7 +148,7 @@ class Tools:
                     f.write(new_content)
                 
                 action = "Updated" if file_exists else "Created"
-                return f"{action} file: {target_file}"
+                return f"{action} file: {target_file}\nInstructions applied: {instructions}"
                 
             except Exception as e:
                 return f"Error editing file: {str(e)}"
@@ -223,12 +238,53 @@ class Tools:
             except Exception as e:
                 return f"Error deleting file: {str(e)}"
         
+        def search_replace(file_path: str, old_string: str, new_string: str) -> str:
+            """
+            Search and replace text in a file.
+            
+            Args:
+                file_path (str): Path to the file
+                old_string (str): Text to replace
+                new_string (str): New text
+                
+            Returns:
+                str: Result of the operation
+            """
+            full_path = os.path.join(self.workspace_root, file_path) if not os.path.isabs(file_path) else file_path
+            
+            try:
+                if not os.path.exists(full_path):
+                    return f"Error: File {file_path} not found"
+                    
+                with open(full_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    
+                if old_string not in content:
+                    return f"Error: Could not find the specified text in {file_path}"
+                    
+                # Count occurrences
+                occurrences = content.count(old_string)
+                if occurrences > 1:
+                    return f"Error: Found {occurrences} occurrences of the text. Please provide more context to make the match unique."
+                    
+                # Replace the text
+                new_content = content.replace(old_string, new_string)
+                
+                with open(full_path, 'w', encoding='utf-8') as f:
+                    f.write(new_content)
+                    
+                return f"Successfully replaced text in {file_path}"
+                
+            except Exception as e:
+                return f"Error performing search and replace: {str(e)}"
+        
         # Register file operation tools
         self.register_function(read_file)
         self.register_function(edit_file)
         self.register_function(list_dir)
         self.register_function(search_files)
         self.register_function(delete_file)
+        self.register_function(search_replace)
 
     def register_terminal_tools(self):
         """Register terminal command execution tools."""
@@ -342,8 +398,11 @@ class Tools:
                 
                 # For now, we'll do a simple keyword search in key files
                 for root, dirs, files in os.walk(self.workspace_root):
+                    # Skip hidden directories and dependencies
+                    dirs[:] = [d for d in dirs if not d.startswith('.') and d != 'node_modules']
+                    
                     for file in files:
-                        if file.endswith(('.py', '.js', '.java', '.cpp', '.c', '.h', '.md')):
+                        if file.endswith(('.py', '.js', '.java', '.cpp', '.c', '.h', '.md', '.jsx', '.ts', '.tsx')):
                             file_path = os.path.join(root, file)
                             rel_path = os.path.relpath(file_path, self.workspace_root)
                             
@@ -375,18 +434,160 @@ class Tools:
                                     end = min(len(lines), best_line + 10)
                                     snippet = '\n'.join(lines[start:end])
                                     
-                                    results.append(f"File: {rel_path}\n```\n{snippet}\n```\n")
+                                    results.append({
+                                        'path': rel_path,
+                                        'score': match_count + (best_score * 0.5),  # Weight both file and line matches
+                                        'snippet': snippet,
+                                        'start_line': start + 1,
+                                        'end_line': end
+                                    })
                             except:
                                 # Skip files we can't read
                                 pass
                 
+                # Sort by score
+                results.sort(key=lambda x: x['score'], reverse=True)
+                
                 if results:
-                    return "\n".join(results[:5])  # Limit to top 5 results
+                    formatted_results = []
+                    for i, result in enumerate(results[:5]):  # Limit to top 5 results
+                        formatted_results.append(
+                            f"File: {result['path']} (lines {result['start_line']}-{result['end_line']})\n```\n{result['snippet']}\n```\n"
+                        )
+                    return "\n".join(formatted_results)
                 else:
                     return f"No semantic matches found for '{query}'"
                     
             except Exception as e:
                 return f"Error during semantic search: {str(e)}"
+        
+        def codebase_search(query: str, target_directories: list = None, explanation: str = "") -> str:
+            """
+            Find code snippets from the codebase relevant to the search query.
+            
+            Args:
+                query (str): The search query to find relevant code
+                target_directories (list): Optional list of directories to search in
+                explanation (str): Explanation for why the search is being performed
+                
+            Returns:
+                str: Relevant code snippets
+            """
+            results = []
+            
+            try:
+                # Define search directories
+                search_dirs = []
+                if target_directories:
+                    for dir_pattern in target_directories:
+                        import glob
+                        matched_dirs = glob.glob(os.path.join(self.workspace_root, dir_pattern))
+                        search_dirs.extend(matched_dirs)
+                else:
+                    search_dirs = [self.workspace_root]
+                
+                # Search through all directories
+                for search_dir in search_dirs:
+                    for root, dirs, files in os.walk(search_dir):
+                        # Skip hidden directories and dependencies
+                        dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ['node_modules', 'dist', '__pycache__']]
+                        
+                        for file in files:
+                            # Skip hidden and binary files
+                            if file.startswith('.') or file.endswith(('.exe', '.bin', '.pyc', '.pyo')):
+                                continue
+                                
+                            # Focus on code files
+                            if not file.endswith(('.py', '.js', '.jsx', '.ts', '.tsx', '.java', '.c', '.cpp', '.h', '.md', '.json')):
+                                continue
+                                
+                            file_path = os.path.join(root, file)
+                            rel_path = os.path.relpath(file_path, self.workspace_root)
+                            
+                            try:
+                                # Skip large files
+                                if os.path.getsize(file_path) > 1024 * 1024:  # 1MB
+                                    continue
+                                    
+                                with open(file_path, 'r', encoding='utf-8') as f:
+                                    content = f.read()
+                                
+                                # Search for query terms
+                                query_terms = query.lower().split()
+                                content_lower = content.lower()
+                                
+                                # Try to find the most relevant section of the file
+                                lines = content.split('\n')
+                                matches = []
+                                
+                                for i, line in enumerate(lines):
+                                    line_lower = line.lower()
+                                    score = sum(1 for term in query_terms if term in line_lower)
+                                    if score > 0:
+                                        matches.append((i, score))
+                                
+                                if matches:
+                                    # Group matches that are close together
+                                    groups = []
+                                    current_group = [matches[0]]
+                                    
+                                    for i in range(1, len(matches)):
+                                        if matches[i][0] - current_group[-1][0] <= 5:  # If lines are within 5 lines
+                                            current_group.append(matches[i])
+                                        else:
+                                            groups.append(current_group)
+                                            current_group = [matches[i]]
+                                    
+                                    groups.append(current_group)
+                                    
+                                    # Find the group with highest score
+                                    best_group = max(groups, key=lambda g: sum(m[1] for m in g))
+                                    
+                                    # Extract a window around this group
+                                    start_line = max(0, best_group[0][0] - 5)
+                                    end_line = min(len(lines), best_group[-1][0] + 5)
+                                    
+                                    snippet = '\n'.join(lines[start_line:end_line])
+                                    score = sum(m[1] for m in best_group)
+                                    
+                                    results.append({
+                                        'path': rel_path,
+                                        'score': score,
+                                        'snippet': snippet,
+                                        'start_line': start_line + 1,
+                                        'end_line': end_line
+                                    })
+                            except:
+                                # Skip files we can't read
+                                pass
+                
+                # Sort by relevance score
+                results.sort(key=lambda x: x['score'], reverse=True)
+                
+                if results:
+                    formatted_results = []
+                    for result in results[:5]:  # Limit to top 5 results
+                        formatted_results.append(
+                            f"File: {result['path']} (lines {result['start_line']}-{result['end_line']})\n```\n{result['snippet']}\n```\n"
+                        )
+                    return "\n".join(formatted_results)
+                else:
+                    return f"No relevant code found for: {query}"
+                    
+            except Exception as e:
+                return f"Error during codebase search: {str(e)}"
+
+        def reapply(target_file: str) -> str:
+            """
+            Reapply the last edit to the specified file with a smarter model.
+            
+            Args:
+                target_file (str): Path to the file to reapply edits to
+                
+            Returns:
+                str: Result of the operation
+            """
+            return f"Function 'reapply' called for file {target_file}. This is a stub implementation. In a full implementation, this would use a more capable model to apply complex edits to the file."
         
         def list_code_usages(symbol_name: str, file_paths: list = None) -> str:
             """
@@ -447,27 +648,66 @@ class Tools:
         # Register semantic tools
         self.register_function(semantic_search)
         self.register_function(list_code_usages)
+        self.register_function(codebase_search)
+        self.register_function(reapply)
     
     def register_web_tools(self):
         """Register web search and web fetching tools."""
         
-        async def web_search(search_term: str) -> str:
+        async def web_search(search_term: str, explanation: str = "") -> str:
             """
-            Search the web for information.
+            Search the web for real-time information.
             
             Args:
                 search_term (str): The search query
+                explanation (str): Explanation for why the search is being performed
                 
             Returns:
-                str: Search results (simulated)
+                str: Search results with relevant snippets and URLs
             """
-            # This is a stub implementation
-            # In a real implementation, you would use a search API
-            return f"Simulated web search results for: {search_term}\n\n" + \
-                   "1. Example result 1\n" + \
-                   "2. Example result 2\n" + \
-                   "3. Example result 3\n\n" + \
-                   "Note: This is a simulated response. Implement a real search API integration for actual results."
+            try:
+                # Use DuckDuckGo API as a simple example
+                # In a production environment, consider using a proper search API
+                url = f"https://api.duckduckgo.com/?q={search_term}&format=json"
+                
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url) as response:
+                        if response.status == 200:
+                            data = await response.json(content_type=None)
+                            
+                            results = []
+                            
+                            # Add abstract if available
+                            if data.get('Abstract'):
+                                results.append(f"Summary: {data['Abstract']}")
+                                results.append(f"Source: {data.get('AbstractSource')} ({data.get('AbstractURL')})")
+                                results.append("")
+                            
+                            # Add related topics
+                            if data.get('RelatedTopics'):
+                                results.append("Related Information:")
+                                for topic in data['RelatedTopics'][:5]:  # Limit to 5 topics
+                                    if 'Text' in topic:
+                                        results.append(f"- {topic['Text']}")
+                                        if 'FirstURL' in topic:
+                                            results.append(f"  URL: {topic['FirstURL']}")
+                                
+                            if not results:
+                                # Fallback message if no results
+                                results.append(f"No detailed information found for '{search_term}'.")
+                                results.append("Try a different search term or check specific websites for this information.")
+                            
+                            return "\n".join(results)
+                        else:
+                            return f"Error: Failed to fetch search results (HTTP {response.status})"
+            except Exception as e:
+                # Provide a more helpful fallback in case of API issues
+                return f"Error during web search: {str(e)}\n\n" + \
+                       f"Web search was attempted for: {search_term}\n" + \
+                       "To get this information, you could:\n" + \
+                       "1. Search on Google or other search engines\n" + \
+                       "2. Check official documentation or websites\n" + \
+                       "3. Look for related information in technical forums"
         
         async def fetch_webpage(urls: list, query: str = None) -> str:
             """
@@ -543,12 +783,13 @@ class Tools:
     def register_code_analysis_tools(self):
         """Register code analysis tools."""
         
-        def file_search(query: str) -> str:
+        def file_search(query: str, explanation: str = "") -> str:
             """
-            Search for files by name pattern.
+            Search for files by name pattern (fuzzy search).
             
             Args:
                 query (str): The filename pattern to search for
+                explanation (str): Explanation for why the search is being performed
                 
             Returns:
                 str: Matching files
@@ -558,27 +799,33 @@ class Tools:
             try:
                 for root, dirs, files in os.walk(self.workspace_root):
                     for file in files:
+                        # Simple fuzzy matching
                         if query.lower() in file.lower():
                             file_path = os.path.join(root, file)
                             rel_path = os.path.relpath(file_path, self.workspace_root)
                             results.append(rel_path)
                 
                 if results:
-                    return "Matching files:\n" + "\n".join(results[:20])  # Limit to 20 results
+                    # Sort by relevance (exact matches first)
+                    results.sort(key=lambda x: 0 if query.lower() == os.path.basename(x).lower() else 1)
+                    return "Matching files:\n" + "\n".join(results[:10])  # Limit to 10 results
                 else:
                     return f"No files matching '{query}' found"
                     
             except Exception as e:
                 return f"Error searching for files: {str(e)}"
         
-        def grep_search(query: str, include_pattern: str = None, is_regexp: bool = False) -> str:
+        def grep_search(query: str, include_pattern: str = None, exclude_pattern: str = None, 
+                       case_sensitive: bool = False, explanation: str = "") -> str:
             """
-            Search for text patterns in files.
+            Search for text patterns in files (regex supported).
             
             Args:
                 query (str): The text pattern to search for
-                include_pattern (str): Optional glob pattern to filter files
-                is_regexp (bool): Whether the query is a regular expression
+                include_pattern (str): Optional glob pattern to filter files to include
+                exclude_pattern (str): Optional glob pattern to filter files to exclude
+                case_sensitive (bool): Whether the search should be case sensitive
+                explanation (str): Explanation for why the search is being performed
                 
             Returns:
                 str: Matching lines
@@ -586,48 +833,54 @@ class Tools:
             results = []
             
             try:
+                import fnmatch
+                
                 for root, dirs, files in os.walk(self.workspace_root):
+                    # Skip hidden directories and common binary directories
+                    dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ['node_modules', 'dist']]
+                    
                     for file in files:
                         # Skip binary files and large files
-                        if file.endswith(('.exe', '.bin', '.obj', '.dll', '.so')):
+                        if file.endswith(('.exe', '.bin', '.obj', '.dll', '.so', '.pyc', '.pyo')):
                             continue
                             
                         file_path = os.path.join(root, file)
+                        rel_path = os.path.relpath(file_path, self.workspace_root)
                         
                         # Check include pattern if provided
-                        if include_pattern:
-                            import fnmatch
-                            rel_path = os.path.relpath(file_path, self.workspace_root)
-                            if not fnmatch.fnmatch(rel_path, include_pattern):
-                                continue
+                        if include_pattern and not fnmatch.fnmatch(rel_path, include_pattern):
+                            continue
+                            
+                        # Check exclude pattern if provided
+                        if exclude_pattern and fnmatch.fnmatch(rel_path, exclude_pattern):
+                            continue
                         
                         try:
+                            # Check if file is too large
+                            if os.path.getsize(file_path) > 1024 * 1024:  # Skip files > 1MB
+                                continue
+                                
                             with open(file_path, 'r', encoding='utf-8') as f:
                                 lines = f.readlines()
                             
-                            rel_path = os.path.relpath(file_path, self.workspace_root)
-                            
                             for i, line in enumerate(lines):
-                                match = False
-                                if is_regexp:
-                                    try:
-                                        if re.search(query, line):
-                                            match = True
-                                    except:
-                                        # Invalid regex
-                                        pass
-                                else:
-                                    if query in line:
-                                        match = True
+                                line_to_check = line if case_sensitive else line.lower()
+                                query_to_check = query if case_sensitive else query.lower()
                                 
-                                if match:
-                                    results.append(f"{rel_path}:{i+1}: {line.strip()}")
+                                try:
+                                    # Try regex first
+                                    if re.search(query_to_check, line_to_check):
+                                        results.append(f"{rel_path}:{i+1}: {line.strip()}")
+                                except re.error:
+                                    # If regex fails, do a simple string search
+                                    if query_to_check in line_to_check:
+                                        results.append(f"{rel_path}:{i+1}: {line.strip()}")
                         except:
                             # Skip files we can't read
                             pass
                 
                 if results:
-                    return "\n".join(results[:20])  # Limit to 20 results
+                    return "\n".join(results[:50])  # Limit to 50 results
                 else:
                     return f"No matches found for '{query}'"
                     
@@ -650,10 +903,108 @@ class Tools:
             return "No errors found in the specified files.\n\n" + \
                    "Note: This is a simulated response. For actual error checking, implement integration with linters or compilers."
         
+        def diff_history(self, explanation: str = None) -> str:
+            """
+            Retrieve the history of recent changes made to files in the workspace.
+            
+            Args:
+                explanation (str, optional): Explanation for why the tool is being used
+                
+            Returns:
+                str: Recent file modifications with timestamps and line changes
+            """
+            try:
+                # Execute git diff command if git repo exists
+                import subprocess
+                
+                # Try to get git history
+                try:
+                    # Check if git repo exists
+                    subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], 
+                                cwd=self.workspace_root, 
+                                check=True, 
+                                stdout=subprocess.PIPE, 
+                                stderr=subprocess.PIPE)
+                    
+                    # Get recent commits
+                    git_log = subprocess.run(
+                        ["git", "log", "--stat", "-5", "--oneline"],
+                        cwd=self.workspace_root,
+                        check=True,
+                        capture_output=True,
+                        text=True
+                    )
+                    
+                    if git_log.stdout:
+                        return f"Recent git history:\n{git_log.stdout}"
+                except:
+                    pass  # Not a git repo or git not available
+                
+                # Fallback: List recently modified files
+                import os
+                import time
+                
+                files_with_times = []
+                for root, dirs, files in os.walk(self.workspace_root):
+                    for file in files:
+                        if file.startswith('.') or file.endswith(('.pyc', '.exe', '.bin')):
+                            continue
+                        
+                        file_path = os.path.join(root, file)
+                        rel_path = os.path.relpath(file_path, self.workspace_root)
+                        
+                        try:
+                            mtime = os.path.getmtime(file_path)
+                            size = os.path.getsize(file_path)
+                            files_with_times.append((rel_path, mtime, size))
+                        except:
+                            pass
+                
+                # Sort by modification time, newest first
+                files_with_times.sort(key=lambda x: x[1], reverse=True)
+                
+                result = "Recent file modifications:\n"
+                for file_path, mtime, size in files_with_times[:10]:  # Show 10 most recent
+                    modified_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(mtime))
+                    result += f"{modified_time} - {file_path} ({size} bytes)\n"
+                
+                return result
+                    
+            except Exception as e:
+                return f"Error retrieving diff history: {str(e)}"
+
         # Register code analysis tools
         self.register_function(file_search)
         self.register_function(grep_search)
         self.register_function(get_errors)
+        self.register_function(diff_history)
+
+    def register_all_tools(self):
+        """
+        Register all available tools for use with the LLM.
+        This is a convenience method to register all tool categories at once.
+        """
+        # File operations
+        self.register_file_tools()
+        
+        # Terminal operations
+        self.register_terminal_tools()
+        
+        # Code analysis
+        self.register_code_analysis_tools()
+        
+        # Semantic understanding
+        self.register_semantic_tools()
+        
+        # Web tools
+        self.register_web_tools()
+        
+        # Math tools
+        self.register_math_tools()
+        
+        print(f"Registered {len(self.tools)} tools for use with LLM.")
+        
+        return self.tools
 
     async def process_tool_calls(self, tool_calls: list, llm_client) -> list:
         """
@@ -691,14 +1042,11 @@ class Tools:
                     # For read_file, don't print the entire output to terminal
                     if function_name == "read_file":
                         target_file = args.get("target_file", "")
-                        start_line = args.get("start_line", 1)
-                        end_line = args.get("end_line", None)
-                        if end_line:
-                            line_count = end_line - start_line + 1
-                        else:
-                            # Estimate line count from output
-                            line_count = output.count('\n') + 1
-                        print(f"Function output: Read {line_count} lines from {target_file}")
+                        
+                        # Calculate line_count based on the actual output string for logging purposes
+                        # 'output' here is the string returned by the read_file function.
+                        actual_lines_in_output = len(output.splitlines()) if output else 0
+                        print(f"Function output: Read {actual_lines_in_output} lines from {target_file}")
                     else:
                         print(f"Function output: {output}")
                     

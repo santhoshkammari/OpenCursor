@@ -1,5 +1,5 @@
 import asyncio
-from src.codeagent.agent import CodeAgent
+from .agent import CodeAgent
 
 
 async def demo():
@@ -9,7 +9,7 @@ async def demo():
 
     # Test with a file operation
     print("\n=== Testing file operation ===")
-    response = await agent("Create a simple Python file that prints 'Hello World'")
+    response = await agent("Convert factorial to class style")
     print("Final response:", response)
 
 

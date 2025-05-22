@@ -7,7 +7,7 @@ from pathlib import Path
 # Add the parent directory to the path so we can import the code_agent package
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from src.codeagent.agent import CodeAgent
+from code_agent.src.agent import CodeAgent
 
 async def main():
     """Test the autonomous agent mode"""

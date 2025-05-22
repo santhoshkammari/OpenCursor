@@ -14,7 +14,7 @@ from rich.syntax import Syntax
 from rich import box
 from rich.markdown import Markdown
 
-from src.codeagent.agent import CodeAgent
+from code_agent.src.agent import CodeAgent
 
 # ASCII Art for OPENCURSOR
 OPENCURSOR_LOGO = """

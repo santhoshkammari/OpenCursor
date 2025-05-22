@@ -1,29 +1,19 @@
 # OpenCursor
 
-A terminal-based code agent with a nice UI built using prompt_toolkit.
+OpenCursor is an AI coding assistant with a Gradio web interface.
 
 ## Features
 
-- Interactive terminal UI with prompt_toolkit
-- Agent mode for code assistance with tools
-- Chat mode for direct LLM interaction
-- File context management (add/drop files)
+- Chat with an AI coding agent in autonomous or interactive mode
+- Direct LLM chat without tools
+- File context management (add, drop, clear)
 - Repository mapping
-- Command history
-
-## Commands
-
-- `/agent <message>` - Send a message to the agent (with tools)
-- `/chat <message>` - Chat with the LLM directly (no tools)
-- `/add <filepath>` - Add a file to the chat context
-- `/drop <filepath>` - Remove a file from the chat context
-- `/clear` - Clear all files from the chat context
-- `/repomap` - Show a map of the repository
-- `/focus <filepath>` - Focus on a specific file
-- `/help` - Show help message
-- `/exit` - Exit the application
+- Focus on specific files
+- Workspace directory selection
 
 ## Installation
+
+Install the required dependencies:
 
 ```bash
 pip install -r requirements.txt
@@ -31,8 +21,33 @@ pip install -r requirements.txt
 
 ## Usage
 
+To start the Gradio web interface:
+
 ```bash
-python -m code_agent.app
+python code_agent/src/gradio_ui.py
 ```
 
-By default, OpenCursor uses the Ollama API with the qwen3_14b_q6k model. You can modify the model and host in the app.py file.
+### UI Components
+
+- **Chat History**: Shows the conversation between you and the AI
+- **Message Input**: Type your messages here
+- **Tool Selection**: Choose which tool to use for processing your message
+- **Workspace Path**: Set the directory to work with
+- **Context Information**: Shows which files are currently in context
+- **Update Context**: Refreshes the context information
+- **Clear Chat**: Clears the chat history
+
+### Available Tools
+
+- **agent (autonomous)**: Agent works step-by-step without user interaction
+- **agent (interactive)**: Agent performs one tool call at a time, waiting for user input
+- **chat (LLM only)**: Chat with the LLM directly without using tools
+- **add file**: Add a file to the context (provide file path in message)
+- **drop file**: Remove a file from the context (provide file path in message)
+- **clear context**: Remove all files from the context
+- **repo map**: Show the files in the current workspace
+- **focus on file**: Add a file to context and show its contents
+
+## Customization
+
+You can modify the model and host settings in the `main()` function of `gradio_ui.py`.
