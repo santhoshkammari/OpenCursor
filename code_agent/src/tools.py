@@ -8,7 +8,6 @@ from typing import Callable, Dict, Any, Optional
 from difflib import unified_diff
 
 
-
 class Tools:
     def __init__(self, workspace_root: str = None):
         """Initialize tools with the workspace root directory."""
@@ -760,54 +759,48 @@ class Tools:
     def register_web_tools(self):
         """Register web search and web fetching tools."""
         
-        async def web_search(search_term: str, explanation: str = "") -> str:
+        async def web_search(search_term: str, show_descriptions: bool = True, explanation: str = "") -> str:
             """
-            Search the web for real-time information.
+            Search the web for real-time information using Google Search.
             
             Args:
                 search_term (str): The search query
+                show_descriptions (bool): Whether to include result descriptions or just URLs
                 explanation (str): Explanation for why the search is being performed
                 
             Returns:
                 str: Search results with relevant snippets and URLs
             """
             try:
-                # Use DuckDuckGo API as a simple example
-                # In a production environment, consider using a proper search API
-                url = f"https://api.duckduckgo.com/?q={search_term}&format=json"
+                from googlesearch import search
                 
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(url) as response:
-                        if response.status == 200:
-                            data = await response.json(content_type=None)
-                            
-                            results = []
-                            
-                            # Add abstract if available
-                            if data.get('Abstract'):
-                                results.append(f"Summary: {data['Abstract']}")
-                                results.append(f"Source: {data.get('AbstractSource')} ({data.get('AbstractURL')})")
-                                results.append("")
-                            
-                            # Add related topics
-                            if data.get('RelatedTopics'):
-                                results.append("Related Information:")
-                                for topic in data['RelatedTopics'][:5]:  # Limit to 5 topics
-                                    if 'Text' in topic:
-                                        results.append(f"- {topic['Text']}")
-                                        if 'FirstURL' in topic:
-                                            results.append(f"  URL: {topic['FirstURL']}")
-                                
-                            if not results:
-                                # Fallback message if no results
-                                results.append(f"No detailed information found for '{search_term}'.")
-                                results.append("Try a different search term or check specific websites for this information.")
-                            
-                            return "\n".join(results)
-                        else:
-                            return f"Error: Failed to fetch search results (HTTP {response.status})"
+                results = []
+                
+                # Get the top 5 search results
+                search_results = list(search(search_term, num_results=5))
+                
+                if show_descriptions:
+                    # If we need descriptions, use the SearchResult objects
+                    search_results_with_desc = list(search(search_term, num_results=5, advanced=True))
+                    
+                    for i, result in enumerate(search_results_with_desc):
+                        results.append(f"{i+1}. {result.title}")
+                        results.append(f"   URL: {result.url}")
+                        if result.description:
+                            results.append(f"   Description: {result.description}")
+                        results.append("")
+                else:
+                    # Just return the URLs
+                    for i, url in enumerate(search_results):
+                        results.append(f"{i+1}. {url}")
+                
+                if not results:
+                    results.append(f"No search results found for '{search_term}'.")
+                    results.append("Try a different search term or check your internet connection.")
+                
+                return "\n".join(results)
             except Exception as e:
-                # Provide a more helpful fallback in case of API issues
+                # Provide a helpful fallback in case of API issues
                 return f"Error during web search: {str(e)}\n\n" + \
                        f"Web search was attempted for: {search_term}\n" + \
                        "To get this information, you could:\n" + \
@@ -846,14 +839,22 @@ class Tools:
             'type': 'function',
             'function': {
                 'name': 'web_search',
-                'description': 'Search the web for information',
+                'description': 'Search the web for real-time information about any topic. Use this tool when you need up-to-date information that might not be available in your training data, or when you need to verify current facts. The search results will include relevant snippets and URLs from web pages. This is particularly useful for questions about current events, technology updates, or any topic that requires recent information.',
                 'parameters': {
                     'type': 'object',
                     'required': ['search_term'],
                     'properties': {
                         'search_term': {
                             'type': 'string',
-                            'description': 'The search query'
+                            'description': 'The search term to look up on the web. Be specific and include relevant keywords for better results. For technical queries, include version numbers or dates if relevant.'
+                        },
+                        'show_descriptions': {
+                            'type': 'boolean',
+                            'description': 'Whether to include descriptions of search results or just URLs. Default is true.'
+                        },
+                        'explanation': {
+                            'type': 'string',
+                            'description': 'One sentence explanation as to why this tool is being used, and how it contributes to the goal.'
                         }
                     }
                 }
