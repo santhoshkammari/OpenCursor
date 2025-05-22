@@ -15,6 +15,8 @@ from rich.prompt import Prompt
 from rich.syntax import Syntax
 from rich import box
 from rich.markdown import Markdown
+from rich.theme import Theme
+from rich.style import Style as RichStyle
 
 # Add prompt_toolkit imports
 from prompt_toolkit import PromptSession
@@ -38,6 +40,38 @@ OPENCURSOR_LOGO = """
                                                                       
 """
 
+# Custom orange theme color
+ORANGE_COLOR = "#FF8C69"
+
+# Create a custom box style with orange color
+class OrangeBox(box.Box):
+    """Custom box with orange borders."""
+    def __init__(self, box_type=box.ROUNDED):
+        self.box = box_type
+        
+    def get_top(self):
+        return f"[{ORANGE_COLOR}]{self.box.get_top()}[/{ORANGE_COLOR}]"
+        
+    def get_bottom(self):
+        return f"[{ORANGE_COLOR}]{self.box.get_bottom()}[/{ORANGE_COLOR}]"
+    
+    def get_left(self):
+        return f"[{ORANGE_COLOR}]{self.box.get_left()}[/{ORANGE_COLOR}]"
+        
+    def get_right(self):
+        return f"[{ORANGE_COLOR}]{self.box.get_right()}[/{ORANGE_COLOR}]"
+    
+    def get_top_left(self):
+        return f"[{ORANGE_COLOR}]{self.box.get_top_left()}[/{ORANGE_COLOR}]"
+        
+    def get_top_right(self):
+        return f"[{ORANGE_COLOR}]{self.box.get_top_right()}[/{ORANGE_COLOR}]"
+        
+    def get_bottom_left(self):
+        return f"[{ORANGE_COLOR}]{self.box.get_bottom_left()}[/{ORANGE_COLOR}]"
+        
+    def get_bottom_right(self):
+        return f"[{ORANGE_COLOR}]{self.box.get_bottom_right()}[/{ORANGE_COLOR}]"
 
 # Custom completers for OpenCursor
 class CommandCompleter(Completer):
@@ -163,7 +197,24 @@ class OpenCursorApp:
         
         # Initialize agent with current workspace
         self.agent = CodeAgent(model_name=model_name, host=host, workspace_root=str(self.current_workspace))
-        self.console = Console()
+        
+        # Create custom theme with orange accent color
+        custom_theme = Theme({
+            "info": RichStyle(color="cyan"),
+            "warning": RichStyle(color="yellow"),
+            "error": RichStyle(color="red"),
+            "success": RichStyle(color="green"),
+            "orange": RichStyle(color=ORANGE_COLOR),
+            "orange.border": RichStyle(color=ORANGE_COLOR),
+            "orange.title": RichStyle(color=ORANGE_COLOR, bold=True),
+        })
+        
+        # Initialize console with custom theme and full width
+        self.console = Console(theme=custom_theme, width=None)
+        
+        # Create custom box styles
+        self.orange_box_rounded = OrangeBox(box.ROUNDED)
+        self.orange_box_simple = OrangeBox(box.SIMPLE)
         
         # Chat context management
         self.files_in_context: Set[Path] = set()
@@ -177,6 +228,7 @@ class OpenCursorApp:
         
         # Output storage
         self.last_output = ""
+        self.tool_results = []  # Store recent tool results
         
         # Current mode (default is "OpenCursor")
         self.current_mode = "OpenCursor"
@@ -230,11 +282,11 @@ class OpenCursorApp:
 
     def print_logo(self):
         """Print the OpenCursor logo"""
-        self.console.print(f"[bold blue]{OPENCURSOR_LOGO}[/bold blue]")
+        self.console.print(f"[{ORANGE_COLOR}]{OPENCURSOR_LOGO}[/{ORANGE_COLOR}]")
         
     def print_help(self):
         """Print help information"""
-        table = Table(title="OpenCursor Commands", box=box.ROUNDED)
+        table = Table(title=f"[{ORANGE_COLOR} bold]OpenCursor Commands[/{ORANGE_COLOR} bold]", box=self.orange_box_rounded)
         table.add_column("Command", style="cyan")
         table.add_column("Description", style="green")
         
@@ -252,7 +304,7 @@ class OpenCursorApp:
         self.console.print(table)
         
         # Add information about agent modes
-        agent_modes = Table(title="Agent Modes", box=box.ROUNDED)
+        agent_modes = Table(title=f"[{ORANGE_COLOR} bold]Agent Modes[/{ORANGE_COLOR} bold]", box=self.orange_box_rounded)
         agent_modes.add_column("Mode", style="cyan")
         agent_modes.add_column("Description", style="green")
         
@@ -267,40 +319,117 @@ class OpenCursorApp:
             self.console.print("[red]No files in context[/red]")
             return
             
-        table = Table(title="Files in Context", box=box.SIMPLE)
+        table = Table(title=f"[{ORANGE_COLOR} bold]Files in Context[/{ORANGE_COLOR} bold]", box=self.orange_box_simple)
         table.add_column("File", style="green")
         
         for file_path in sorted(self.files_in_context):
             table.add_row(str(file_path.relative_to(self.current_workspace)))
             
         self.console.print(table)
+    
+    def display_tool_results(self):
+        """Display recent tool results in a nice format"""
+        if not self.tool_results:
+            return
+            
+        # Create a panel to display tool results
+        table = Table(box=self.orange_box_rounded, title=f"[{ORANGE_COLOR} bold]Recent Tool Results[/{ORANGE_COLOR} bold]", expand=True)
+        table.add_column("Tool", style="cyan")
+        table.add_column("Result", style="white")
+        
+        for tool_name, result in self.tool_results[-5:]:  # Show last 5 results
+            # Format the result based on tool type
+            if tool_name == "web_search":
+                # Create a nested table for web search results
+                web_results = self._format_web_search_results(result)
+                table.add_row(tool_name, web_results)
+            elif tool_name in ["read_file", "edit_file", "grep_search", "codebase_search"]:
+                # For code-related results, use syntax highlighting where possible
+                if "```" in result:
+                    # Extract code blocks and format them
+                    formatted_result = self._format_code_blocks(result)
+                    table.add_row(tool_name, formatted_result)
+                else:
+                    table.add_row(tool_name, result)
+            else:
+                # Default formatting for other tools
+                table.add_row(tool_name, result)
+        
+        self.console.print(table)
+        
+    def _format_web_search_results(self, result: str) -> str:
+        """Format web search results into a nested table"""
+        lines = result.strip().split('\n')
+        
+        # Create a nested table for web results
+        web_table = Table(box=None, expand=True)
+        web_table.add_column("Result", style="white")
+        
+        current_result = []
+        for line in lines:
+            if line.strip() == "":
+                if current_result:
+                    web_table.add_row("\n".join(current_result))
+                    current_result = []
+            else:
+                current_result.append(line)
+                
+        # Add the last result if any
+        if current_result:
+            web_table.add_row("\n".join(current_result))
+            
+        return web_table
+        
+    def _format_code_blocks(self, result: str) -> str:
+        """Format code blocks with syntax highlighting"""
+        parts = result.split("```")
+        formatted_parts = []
+        
+        for i, part in enumerate(parts):
+            if i % 2 == 0:
+                # Regular text
+                formatted_parts.append(part)
+            else:
+                # Code block
+                lang_and_code = part.split("\n", 1)
+                if len(lang_and_code) > 1:
+                    lang = lang_and_code[0].strip()
+                    code = lang_and_code[1]
+                    syntax = Syntax(code, lang, theme="monokai", line_numbers=True)
+                    formatted_parts.append(syntax)
+                else:
+                    # If no language specified
+                    syntax = Syntax(part, "text", theme="monokai")
+                    formatted_parts.append(syntax)
+                    
+        return formatted_parts
         
     def add_file_to_context(self, file_path: str):
         """Add a file to the chat context"""
         path = Path(file_path).resolve()
         if path.exists() and path.is_file():
             self.files_in_context.add(path)
-            self.console.print(f"[green]Added {path} to context[/green]")
+            self.console.print(f"[success]Added {path} to context[/success]")
         else:
-            self.console.print(f"[red]File not found: {file_path}[/red]")
+            self.console.print(f"[error]File not found: {file_path}[/error]")
     
     def drop_file_from_context(self, file_path: str):
         """Remove a file from the chat context"""
         path = Path(file_path).resolve()
         if path in self.files_in_context:
             self.files_in_context.remove(path)
-            self.console.print(f"[green]Removed {path} from context[/green]")
+            self.console.print(f"[success]Removed {path} from context[/success]")
         else:
-            self.console.print(f"[red]File not in context: {file_path}[/red]")
+            self.console.print(f"[error]File not in context: {file_path}[/error]")
     
     def clear_context(self):
         """Clear all files from the chat context"""
         self.files_in_context.clear()
-        self.console.print("[green]Cleared all files from context[/green]")
+        self.console.print("[success]Cleared all files from context[/success]")
     
     def generate_repo_map(self):
         """Generate a map of the repository"""
-        self.console.print("[bold]REPOSITORY MAP:[/bold]")
+        self.console.print(f"[{ORANGE_COLOR} bold]REPOSITORY MAP:[/{ORANGE_COLOR} bold]")
         
         # Get all files in the current directory recursively
         all_files = []
@@ -313,7 +442,7 @@ class OpenCursorApp:
                     all_files.append(rel_path)
         
         # Sort and format files
-        table = Table(box=box.SIMPLE)
+        table = Table(box=self.orange_box_simple, expand=True)
         table.add_column("File", style="green")
         table.add_column("Status", style="cyan")
         
@@ -332,21 +461,27 @@ class OpenCursorApp:
         elif command == "/help":
             self.print_help()
         elif command == "/agent":
-            self.console.print("[cyan]Agent working...[/cyan]")
+            self.console.print("[info]Agent working...[/info]")
             response = await self.agent(args)
-            self.console.print(Panel(response, title="Agent Response", border_style="green"))
+            self.console.print(Panel(response, title=f"[{ORANGE_COLOR} bold]Agent Response[/{ORANGE_COLOR} bold]", border_style=ORANGE_COLOR, expand=True))
             self.last_output = response
+            
+            # Display tool results after agent response
+            self.display_tool_results()
         elif command == "/interactive":
-            self.console.print("[cyan]Interactive mode...[/cyan]")
+            self.console.print("[info]Interactive mode...[/info]")
             # Interactive mode with the agent
             response = await self.agent.interactive(args)
-            self.console.print(Panel(response, title="Interactive Response", border_style="yellow"))
+            self.console.print(Panel(response, title=f"[{ORANGE_COLOR} bold]Interactive Response[/{ORANGE_COLOR} bold]", border_style=ORANGE_COLOR, expand=True))
             self.last_output = response
+            
+            # Display tool results after agent response
+            self.display_tool_results()
         elif command == "/chat":
-            self.console.print("[cyan]Chatting...[/cyan]")
+            self.console.print("[info]Chatting...[/info]")
             # Direct chat with LLM without tools
             response = await self.agent.llm_client.chat(user_message=args, tools=None)
-            self.console.print(Panel(response.message.content, title="LLM Response", border_style="blue"))
+            self.console.print(Panel(response.message.content, title=f"[{ORANGE_COLOR} bold]LLM Response[/{ORANGE_COLOR} bold]", border_style=ORANGE_COLOR, expand=True))
             self.last_output = response.message.content
         elif command == "/add":
             self.add_file_to_context(args)
@@ -359,21 +494,21 @@ class OpenCursorApp:
         elif command == "/focus":
             if os.path.exists(args):
                 self.add_file_to_context(args)
-                self.console.print(f"[green]Focusing on {args}[/green]")
+                self.console.print(f"[success]Focusing on {args}[/success]")
                 try:
                     with open(args, 'r') as f:
                         content = f.read()
                     
                     # Determine syntax highlighting based on file extension
                     extension = os.path.splitext(args)[1].lstrip('.')
-                    syntax = Syntax(content, extension or "text", line_numbers=True)
-                    self.console.print(Panel(syntax, title=f"File: {args}", border_style="cyan"))
+                    syntax = Syntax(content, extension or "text", line_numbers=True, theme="monokai")
+                    self.console.print(Panel(syntax, title=f"[{ORANGE_COLOR} bold]File: {args}[/{ORANGE_COLOR} bold]", border_style=ORANGE_COLOR, expand=True))
                 except Exception as e:
-                    self.console.print(f"[red]Error reading file: {e}[/red]")
+                    self.console.print(f"[error]Error reading file: {e}[/error]")
             else:
-                self.console.print(f"[red]File not found: {args}[/red]")
+                self.console.print(f"[error]File not found: {args}[/error]")
         else:
-            self.console.print(f"[red]Unknown command: {command}[/red]")
+            self.console.print(f"[error]Unknown command: {command}[/error]")
         
         return True
     
@@ -386,6 +521,25 @@ class OpenCursorApp:
         self.console.print(f"[bold cyan]Using workspace:[/bold cyan] {self.current_workspace}")
         self.console.print("[bold yellow]TIP:[/bold yellow] Use '/' for command completion and '@' for file path completion")
         self.console.print("[bold yellow]KEY BINDINGS:[/bold yellow] Ctrl+Space to toggle completions, Ctrl+N/Ctrl+P to navigate completions")
+        
+        # Hook into agent's tool processing to capture tool results
+        original_process_tool_calls = self.agent.tools_manager.process_tool_calls
+        
+        async def process_tool_calls_with_capture(*args, **kwargs):
+            results = await original_process_tool_calls(*args, **kwargs)
+            
+            # Capture tool results for display
+            tool_calls = args[0]  # First argument is tool_calls list
+            for i, tool_call in enumerate(tool_calls):
+                if i < len(results):
+                    function_name = tool_call['function']['name']
+                    result = results[i]
+                    self.tool_results.append((function_name, result))
+            
+            return results
+            
+        # Replace the method with our wrapped version
+        self.agent.tools_manager.process_tool_calls = process_tool_calls_with_capture
         
         running = True
         while running:
@@ -434,16 +588,19 @@ class OpenCursorApp:
                     # Default to autonomous agent if no command specified
                     self.current_mode = "Agent"
                     response = await self.agent(user_input)
-                    self.console.print(Panel(response, title="Agent Response", border_style="green"))
+                    self.console.print(Panel(response, title=f"[{ORANGE_COLOR} bold]Agent Response[/{ORANGE_COLOR} bold]", border_style=ORANGE_COLOR, expand=True))
                     self.last_output = response
                     
+                    # Display tool results after agent response
+                    self.display_tool_results()
+                    
             except KeyboardInterrupt:
-                self.console.print("\n[yellow]Exiting...[/yellow]")
+                self.console.print("\n[warning]Exiting...[/warning]")
                 running = False
             except Exception as e:
-                self.console.print(f"[bold red]Error:[/bold red] {str(e)}")
+                self.console.print(f"[error]Error:[/error] {str(e)}")
         
-        self.console.print("[bold green]Thank you for using OpenCursor![/bold green]")
+        self.console.print(f"[{ORANGE_COLOR} bold]Thank you for using OpenCursor![/{ORANGE_COLOR} bold]")
 
 async def main():
     """Main entry point"""
@@ -455,8 +612,17 @@ async def main():
     parser.add_argument("-q", "--query", default=None, help="Initial query to process")
     args = parser.parse_args()
     
-    console = Console()
-    console.print("[bold green]Starting OpenCursor...[/bold green]")
+    # Create custom theme with orange accent color
+    custom_theme = Theme({
+        "info": RichStyle(color="cyan"),
+        "warning": RichStyle(color="yellow"),
+        "error": RichStyle(color="red"),
+        "success": RichStyle(color="green"),
+        "orange": RichStyle(color=ORANGE_COLOR),
+    })
+    
+    console = Console(theme=custom_theme, width=None)
+    console.print(f"[{ORANGE_COLOR} bold]Starting OpenCursor...[/{ORANGE_COLOR} bold]")
     
     # Create and run the app with parsed arguments
     app = OpenCursorApp(
@@ -470,4 +636,5 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        Console().print("\n[bold red]Goodbye![/bold red]")
+        custom_theme = Theme({"orange": RichStyle(color=ORANGE_COLOR)})
+        Console(theme=custom_theme).print(f"\n[orange bold]Goodbye![/orange bold]")
