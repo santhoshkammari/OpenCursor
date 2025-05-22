@@ -1,1 +1,2 @@
 python -m code_agent.src.app -w /home/ntlpt59/MAIN/Personal/OpenCursor/code_agent/tests/TestEnvironment/sample -q "read add.py file"
+python -m code_agent.src.app -w /home/ntlpt59/MAIN/Personal/CredoGPT -q "search for deepresearch minin file and then read intention file also, i donlt' knwo which file has that thought class, get that and show me ( i only remembe it has three attributes)"
