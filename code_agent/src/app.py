@@ -38,6 +38,7 @@ OPENCURSOR_LOGO = """
                                                                       
 """
 
+
 # Custom completers for OpenCursor
 class CommandCompleter(Completer):
     """Completer for OpenCursor commands"""
