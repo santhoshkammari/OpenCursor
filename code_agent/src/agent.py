@@ -36,46 +36,9 @@ class CodeAgent:
         Returns:
             str: The final response from the model.
         """
-        # For interactive mode, use the simple approach
-        if user_message.startswith("/interactive"):
-            # Strip the command
-            user_message = user_message.replace("/interactive", "").strip()
-            return await self.interactive_mode(user_message)
-        
-        # Use autonomous agent mode by default
         return await self.autonomous_mode(user_message)
     
-    async def interactive_mode(self, user_message: str) -> str:
-        """
-        Process a user message interactively (single tool call -> response).
-        
-        Args:
-            user_message (str): The user's message.
-            
-        Returns:
-            str: The final response from the model.
-        """
-        # Send to LLM
-        response = await self.llm_client.chat(
-            user_message=user_message,
-            tools=self.tools_manager.tools,
-            system_message=SYSTEM_PROMPT
-        )
 
-        # Process tool calls if any
-        if response.message.tool_calls:
-            await self.tools_manager.process_tool_calls(response.message.tool_calls, self.llm_client)
-
-            # Get final response with tool results
-            final_response = await self.llm_client.chat(
-                user_message="",  # Empty message to just get the next response
-                tools=None  # No tools for the final response
-            )
-
-            return final_response.message.content
-
-        return response.message.content
-    
     async def autonomous_mode(self, user_message: str) -> str:
         """
         Process a user message in autonomous mode (multiple tool calls in sequence).
