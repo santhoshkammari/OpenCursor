@@ -418,25 +418,14 @@ class OpenCursorApp:
                     box=box.ROUNDED
                 )
             
-            # Create layout with panels
-            layout = Layout()
+            # Create a group of panels rather than a layout for better rendering
+            from rich.console import Group
             
-            # Add think panel
-            layout.split(
-                Layout(think_panel, name="think", size=len(think_content.splitlines()) + 4),  # Add size based on content
-                Layout(name="bottom")
-            )
-            
-            # Add response and summary if exists
+            panels = [think_panel, response_panel]
             if summary_panel:
-                layout["bottom"].split(
-                    Layout(response_panel, name="response"),
-                    Layout(summary_panel, name="summary", size=len(execution_summary.splitlines()) + 4)  # Add size based on content
-                )
-            else:
-                layout["bottom"].update(response_panel)
-            
-            return layout
+                panels.append(summary_panel)
+                
+            return Group(*panels)
         else:
             # Return the original response if no think tags
             return Markdown(response)  # Use Markdown for better formatting
@@ -504,22 +493,13 @@ class OpenCursorApp:
             # Process response to split think and regular content
             processed_response = self._split_response_with_think(response)
             
-            if isinstance(processed_response, Layout):
-                # If it's a layout with think/response sections, print it directly
-                self.console.print(Panel(
-                    processed_response,
-                    title=f"[{ORANGE_COLOR} bold]Agent Response[/{ORANGE_COLOR} bold]", 
-                    border_style=ORANGE_COLOR, 
-                    expand=True
-                ))
-            else:
-                # Otherwise print as normal
-                self.console.print(Panel(
-                    processed_response,
-                    title=f"[{ORANGE_COLOR} bold]Agent Response[/{ORANGE_COLOR} bold]", 
-                    border_style=ORANGE_COLOR, 
-                    expand=True
-                ))
+            # Display the processed response in a panel
+            self.console.print(Panel(
+                processed_response,
+                title=f"[{ORANGE_COLOR} bold]Agent Response[/{ORANGE_COLOR} bold]", 
+                border_style=ORANGE_COLOR, 
+                expand=True
+            ))
                 
             self.last_output = response
             
@@ -533,22 +513,13 @@ class OpenCursorApp:
             # Process response to split think and regular content
             processed_response = self._split_response_with_think(response)
             
-            if isinstance(processed_response, Layout):
-                # If it's a layout with think/response sections, print it directly
-                self.console.print(Panel(
-                    processed_response,
-                    title=f"[{ORANGE_COLOR} bold]Interactive Response[/{ORANGE_COLOR} bold]", 
-                    border_style=ORANGE_COLOR, 
-                    expand=True
-                ))
-            else:
-                # Otherwise print as normal
-                self.console.print(Panel(
-                    processed_response,
-                    title=f"[{ORANGE_COLOR} bold]Interactive Response[/{ORANGE_COLOR} bold]", 
-                    border_style=ORANGE_COLOR, 
-                    expand=True
-                ))
+            # Display the processed response in a panel
+            self.console.print(Panel(
+                processed_response,
+                title=f"[{ORANGE_COLOR} bold]Interactive Response[/{ORANGE_COLOR} bold]", 
+                border_style=ORANGE_COLOR, 
+                expand=True
+            ))
                 
             self.last_output = response
             
@@ -666,22 +637,13 @@ class OpenCursorApp:
                     # Process response to split think and regular content
                     processed_response = self._split_response_with_think(response)
                     
-                    if isinstance(processed_response, Layout):
-                        # If it's a layout with think/response sections, print it directly
-                        self.console.print(Panel(
-                            processed_response,
-                            title=f"[{ORANGE_COLOR} bold]Agent Response[/{ORANGE_COLOR} bold]", 
-                            border_style=ORANGE_COLOR, 
-                            expand=True
-                        ))
-                    else:
-                        # Otherwise print as normal
-                        self.console.print(Panel(
-                            processed_response,
-                            title=f"[{ORANGE_COLOR} bold]Agent Response[/{ORANGE_COLOR} bold]", 
-                            border_style=ORANGE_COLOR, 
-                            expand=True
-                        ))
+                    # Display the processed response in a panel
+                    self.console.print(Panel(
+                        processed_response,
+                        title=f"[{ORANGE_COLOR} bold]Agent Response[/{ORANGE_COLOR} bold]", 
+                        border_style=ORANGE_COLOR, 
+                        expand=True
+                    ))
                         
                     self.last_output = response
                     
