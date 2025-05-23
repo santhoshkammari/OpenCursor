@@ -589,7 +589,6 @@ async def main():
     })
     
     console = Console(theme=custom_theme, width=None)
-    console.print(f"[{ORANGE_COLOR} bold]Starting OpenCursor...[/{ORANGE_COLOR} bold]")
     
     # Create and run the app with parsed arguments
     app = OpenCursorApp(
