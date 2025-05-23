@@ -77,10 +77,6 @@ class Tools:
         # Math tools
         self.register_math_tools()
         
-        # Note: Additional tools like web_search_playwright are registered
-        # separately in the agent.py file using register_additional_tools
-        
-        print(f"Registered {len(self.tools)} tools for use with LLM.")
         
         return self.tools
 
