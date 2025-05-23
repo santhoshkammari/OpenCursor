@@ -487,10 +487,7 @@ class OpenCursorApp:
         # Show the logo and welcome message
         self.print_logo()
         self.console.print("[bold green]Welcome to OpenCursor![/bold green] Type [bold]/help[/bold] for available commands.")
-        self.console.print("[bold cyan]NEW:[/bold cyan] OpenCursor now features an autonomous agent mode (default) that works step-by-step without user interaction.")
         self.console.print(f"[bold cyan]Using workspace:[/bold cyan] {self.current_workspace}")
-        self.console.print("[bold yellow]TIP:[/bold yellow] Use '/' for command completion and '@' for file path completion")
-        self.console.print("[bold yellow]KEY BINDINGS:[/bold yellow] Ctrl+Space to toggle completions, Ctrl+N/Ctrl+P to navigate completions")
         
         # Hook into agent's tool processing to capture tool results
         original_process_tool_calls = self.agent.tools_manager.process_tool_calls
