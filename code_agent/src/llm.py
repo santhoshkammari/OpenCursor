@@ -76,6 +76,7 @@ class LLMClient:
                 print("\n\nDone thinking...")   
             print(token+" ", end="", flush=True)
             time.sleep(0.01)
+        print("\n\n")
 
 
         # Add assistant response to conversation

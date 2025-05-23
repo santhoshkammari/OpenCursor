@@ -374,6 +374,73 @@ class OpenCursorApp:
                     
         return formatted_parts
         
+    def _split_response_with_think(self, response: str):
+        """Split response into think section and regular response"""
+        # Check if response contains <think> tags
+        if "<think>" in response and "</think>" in response:
+            # Extract think content
+            think_start = response.find("<think>") + len("<think>")
+            think_end = response.find("</think>")
+            think_content = response[think_start:think_end].strip()
+            
+            # Extract regular response (everything after </think>)
+            regular_response = response[think_end + len("</think>"):].strip()
+            
+            # Create nested panels
+            think_panel = Panel(
+                Markdown(think_content),  # Use Markdown for better formatting
+                title=f"[{ORANGE_COLOR} bold]Thinking Process[/{ORANGE_COLOR} bold]",
+                border_style="cyan",
+                box=box.ROUNDED
+            )
+            
+            # If there's an execution summary, split it out too
+            execution_summary = ""
+            if "[Execution Summary]" in regular_response:
+                summary_start = regular_response.find("[Execution Summary]")
+                execution_summary = regular_response[summary_start:].strip()
+                regular_response = regular_response[:summary_start].strip()
+            
+            # Create response panel
+            response_panel = Panel(
+                Markdown(regular_response),  # Use Markdown for better formatting
+                border_style="green",
+                box=box.ROUNDED
+            )
+            
+            # Create summary panel if exists
+            summary_panel = None
+            if execution_summary:
+                summary_panel = Panel(
+                    Markdown(execution_summary),  # Use Markdown for better formatting
+                    title=f"[{ORANGE_COLOR} bold]Execution Summary[/{ORANGE_COLOR} bold]",
+                    border_style="yellow",
+                    box=box.ROUNDED
+                )
+            
+            # Create layout with panels
+            layout = Layout()
+            
+            # Add think panel
+            layout.split(
+                Layout(think_panel, name="think", size=len(think_content.splitlines()) + 4),  # Add size based on content
+                Layout(name="bottom")
+            )
+            
+            # Add response and summary if exists
+            if summary_panel:
+                layout["bottom"].split(
+                    Layout(response_panel, name="response"),
+                    Layout(summary_panel, name="summary", size=len(execution_summary.splitlines()) + 4)  # Add size based on content
+                )
+            else:
+                layout["bottom"].update(response_panel)
+            
+            return layout
+        else:
+            # Return the original response if no think tags
+            return Markdown(response)  # Use Markdown for better formatting
+        
     def add_file_to_context(self, file_path: str):
         """Add a file to the chat context"""
         path = Path(file_path).resolve()
@@ -433,7 +500,27 @@ class OpenCursorApp:
         elif command == "/agent":
             self.console.print("[info]Agent working...[/info]")
             response = await self.agent(args)
-            self.console.print(Panel(response, title=f"[{ORANGE_COLOR} bold]Agent Response[/{ORANGE_COLOR} bold]", border_style=ORANGE_COLOR, expand=True))
+            
+            # Process response to split think and regular content
+            processed_response = self._split_response_with_think(response)
+            
+            if isinstance(processed_response, Layout):
+                # If it's a layout with think/response sections, print it directly
+                self.console.print(Panel(
+                    processed_response,
+                    title=f"[{ORANGE_COLOR} bold]Agent Response[/{ORANGE_COLOR} bold]", 
+                    border_style=ORANGE_COLOR, 
+                    expand=True
+                ))
+            else:
+                # Otherwise print as normal
+                self.console.print(Panel(
+                    processed_response,
+                    title=f"[{ORANGE_COLOR} bold]Agent Response[/{ORANGE_COLOR} bold]", 
+                    border_style=ORANGE_COLOR, 
+                    expand=True
+                ))
+                
             self.last_output = response
             
             # Display tool results after agent response
@@ -442,7 +529,27 @@ class OpenCursorApp:
             self.console.print("[info]Interactive mode...[/info]")
             # Interactive mode with the agent
             response = await self.agent.interactive(args)
-            self.console.print(Panel(response, title=f"[{ORANGE_COLOR} bold]Interactive Response[/{ORANGE_COLOR} bold]", border_style=ORANGE_COLOR, expand=True))
+            
+            # Process response to split think and regular content
+            processed_response = self._split_response_with_think(response)
+            
+            if isinstance(processed_response, Layout):
+                # If it's a layout with think/response sections, print it directly
+                self.console.print(Panel(
+                    processed_response,
+                    title=f"[{ORANGE_COLOR} bold]Interactive Response[/{ORANGE_COLOR} bold]", 
+                    border_style=ORANGE_COLOR, 
+                    expand=True
+                ))
+            else:
+                # Otherwise print as normal
+                self.console.print(Panel(
+                    processed_response,
+                    title=f"[{ORANGE_COLOR} bold]Interactive Response[/{ORANGE_COLOR} bold]", 
+                    border_style=ORANGE_COLOR, 
+                    expand=True
+                ))
+                
             self.last_output = response
             
             # Display tool results after agent response
@@ -555,7 +662,27 @@ class OpenCursorApp:
                     # Default to autonomous agent if no command specified
                     self.current_mode = "Agent"
                     response = await self.agent(user_input)
-                    self.console.print(Panel(response, title=f"[{ORANGE_COLOR} bold]Agent Response[/{ORANGE_COLOR} bold]", border_style=ORANGE_COLOR, expand=True))
+                    
+                    # Process response to split think and regular content
+                    processed_response = self._split_response_with_think(response)
+                    
+                    if isinstance(processed_response, Layout):
+                        # If it's a layout with think/response sections, print it directly
+                        self.console.print(Panel(
+                            processed_response,
+                            title=f"[{ORANGE_COLOR} bold]Agent Response[/{ORANGE_COLOR} bold]", 
+                            border_style=ORANGE_COLOR, 
+                            expand=True
+                        ))
+                    else:
+                        # Otherwise print as normal
+                        self.console.print(Panel(
+                            processed_response,
+                            title=f"[{ORANGE_COLOR} bold]Agent Response[/{ORANGE_COLOR} bold]", 
+                            border_style=ORANGE_COLOR, 
+                            expand=True
+                        ))
+                        
                     self.last_output = response
                     
                     # Display tool results after agent response
