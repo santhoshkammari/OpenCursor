@@ -1,6 +1,9 @@
+import time
 import ollama
 from ollama import ChatResponse
 from typing import Dict, Any, List, Tuple, Optional
+
+import tiktoken
 
 
 class LLMClient:
@@ -51,13 +54,30 @@ class LLMClient:
         self.add_message("user", user_message)
         
         # Send to LLM
+
         response: ChatResponse = await self.client.chat(
             self.model_name,
             messages=self.messages,
             tools=tools if tools else None,
         )
+
+
+        START_THINK_TOKEN = "<think>"
+        END_THINK_TOKEN = "</think>"
+        THINKING_MODE=False
+        # fake stream with 0.1 second delay
         
-        
+        for token in response.message.content.split(" "):
+            if START_THINK_TOKEN in token:
+                THINKING_MODE=True
+                print("Thinking...")
+            elif END_THINK_TOKEN in token:
+                THINKING_MODE=False
+                print("\n\nDone thinking...")   
+            print(token+" ", end="", flush=True)
+            time.sleep(0.01)
+
+
         # Add assistant response to conversation
         self.add_message("assistant", response.message.content)
         
