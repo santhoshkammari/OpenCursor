@@ -548,7 +548,7 @@ class OpenCursorApp:
             # Create a group with just the thinking and response panels
             # from rich.console import Group
             # return Group(think_panel, response_panel)
-            return Markdown(response)
+            return Markdown(regular_response)
 
         
         else:
