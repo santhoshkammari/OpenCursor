@@ -577,7 +577,7 @@ async def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="OpenCursor - An AI-powered code assistant")
     parser.add_argument("-m", "--model", default="qwen3_14b_q6k:latest", help="Model name to use")
-    parser.add_argument("-h", "--host", default="http://192.168.170.76:11434", help="Ollama host URL")
+    parser.add_argument("--host", default="http://192.168.170.76:11434", help="Ollama host URL")
     parser.add_argument("-w", "--workspace", help="Path to workspace directory")
     parser.add_argument("-q", "--query", default=None, help="Initial query to process")
     args = parser.parse_args()
