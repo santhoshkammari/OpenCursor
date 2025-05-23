@@ -1,0 +1,22 @@
+[build-system]
+requires = [ "poetry-core",]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "opencursor"
+version = "0.0.8"
+description = "An AI-powered code agent for workspace operations"
+authors = [ "Kammari Santhosh",]
+readme = "README.md"
+license = "MIT License"
+repository = "https://github.com/santhosh/"
+keywords = [ "",]
+include = [ "stapp_run.py", "trace_stapp.py",]
+[[tool.poetry.packages]]
+include = "code_agent"
+
+[tool.poetry.scripts]
+opencursor = "code_agent.cli_entry:entry_point"
+
+[tool.poetry.dependencies]
+python = "^3.11"

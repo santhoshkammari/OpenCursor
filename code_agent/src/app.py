@@ -608,3 +608,12 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         custom_theme = Theme({"orange": RichStyle(color=ORANGE_COLOR)})
         Console(theme=custom_theme).print(f"\n[orange bold]Goodbye![/orange bold]")
+
+# Add a non-async entry point for the package
+def entry_point():
+    """Non-async entry point for the package"""
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        custom_theme = Theme({"orange": RichStyle(color=ORANGE_COLOR)})
+        Console(theme=custom_theme).print(f"\n[orange bold]Goodbye![/orange bold]")
