@@ -1,0 +1,5 @@
+1. Tool call's showing issue fix
+2. streaming the ui
+3. Allow terminal tool thing with three options, 1. yes or presses enter 2. edit or like natural language
+   explanaiton by user wihtout executing append that.
+3. Edit file Agent

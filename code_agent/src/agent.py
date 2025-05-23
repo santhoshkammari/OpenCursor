@@ -105,29 +105,50 @@ class CodeAgent:
             
             # Process tool calls if any
             if response.message.tool_calls:
-                # Log tool calls with simplified names
-                tool_calls_info = []
+                # Process each tool call and show real-time feedback
                 for tc in response.message.tool_calls:
                     name = tc['function']['name']
-                    # Simplify tool names for display
+                    args = tc['function']['arguments']
+                    
+                    # Display explanation if available
+                    if 'explanation' in args and args['explanation']:
+                        print(f"{args['explanation']}...")
+                    
+                    # Display what tool is being used with relevant info
                     if name == 'read_file':
-                        tool_calls_info.append("Reading file...")
+                        target_file = args.get('target_file', '')
+                        print(f"Reading file: {target_file}")
                     elif name == 'list_dir':
-                        tool_calls_info.append("Listing directory...")
+                        path = args.get('relative_workspace_path', '')
+                        print(f"Listing directory: {path}")
                     elif name == 'edit_file':
-                        tool_calls_info.append("Editing file...")
+                        target_file = args.get('target_file', '')
+                        print(f"Editing file: {target_file}")
                     elif name == 'grep_search':
-                        tool_calls_info.append("Searching code...")
+                        query = args.get('query', '')
+                        print(f"Searching code for: {query}")
                     elif name == 'file_search':
-                        tool_calls_info.append("Finding files...")
-                    elif name == 'semantic_search':
-                        tool_calls_info.append("Semantic search...")
+                        query = args.get('query', '')
+                        print(f"Finding files matching: {query}")
+                    elif name == 'codebase_search':
+                        query = args.get('query', '')
+                        print(f"Semantic search for: {query}")
                     elif name == 'run_terminal_cmd':
-                        tool_calls_info.append("Running command...")
+                        cmd = args.get('command', '')
+                        print(f"Running command: {cmd}")
                     else:
-                        tool_calls_info.append(f"{name}...")
-                
-                execution_log.append(f"Step {i+1}: {', '.join(tool_calls_info)}")
+                        print(f"Using {name}...")
+                    
+                    # Log for execution summary
+                    tool_info = f"{name}"
+                    if name == 'read_file':
+                        tool_info = f"Reading {args.get('target_file', '')}"
+                    elif name == 'list_dir':
+                        tool_info = f"Listing {args.get('relative_workspace_path', '')}"
+                    elif name == 'edit_file':
+                        tool_info = f"Editing {args.get('target_file', '')}"
+                    
+                    execution_log.append(f"Step {i+1}: {tool_info}")
                 
                 # Process tool calls
                 await self.tools_manager.process_tool_calls(response.message.tool_calls, self.llm_client)
@@ -143,6 +164,7 @@ class CodeAgent:
                     return f"{response.message.content}\n\n[Execution Summary]\n{execution_summary}"
                 else:
                     # No content, ask for a final response
+                    print("Generating final summary...")
                     final_response = await self.llm_client.chat(
                         user_message="Now that you've completed the task, provide a summary of what you've done.",
                         tools=None

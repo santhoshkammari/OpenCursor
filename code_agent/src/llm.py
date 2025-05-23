@@ -57,6 +57,7 @@ class LLMClient:
             tools=tools if tools else None,
         )
         
+        
         # Add assistant response to conversation
         self.add_message("assistant", response.message.content)
         
