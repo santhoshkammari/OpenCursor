@@ -4,6 +4,7 @@ import sys
 import asyncio
 import argparse
 import time
+import subprocess
 from typing import List, Dict, Optional, Set, Union
 from pathlib import Path
 
@@ -209,7 +210,7 @@ class OpenCursorApp:
         # Available commands
         self.commands = [
             "/agent", "/chat", "/add", "/drop", "/clear", 
-            "/help", "/exit", "/repomap", "/focus", "/interactive"
+            "/help", "/exit", "/repomap", "/focus", "/interactive", "/diff"
         ]
         
         # Output storage
@@ -284,6 +285,7 @@ class OpenCursorApp:
         table.add_row("/clear", "Clear all files from the chat context")
         table.add_row("/repomap", "Show a map of the repository")
         table.add_row("/focus <filepath>", "Focus on a specific file")
+        table.add_row("/diff <filepath>", "Show git diff for a file with syntax highlighting")
         table.add_row("/help", "Show this help message")
         table.add_row("/exit", "Exit the application")
         
@@ -298,6 +300,17 @@ class OpenCursorApp:
         agent_modes.add_row("Interactive", "Agent performs one tool call at a time, waiting for user input")
         
         self.console.print(agent_modes)
+        
+        # Add information about code block format
+        code_formats = Table(title=f"[{ORANGE_COLOR} bold]Code Block Formats[/{ORANGE_COLOR} bold]", box=box.ROUNDED, border_style=ORANGE_COLOR)
+        code_formats.add_column("Format", style="cyan")
+        code_formats.add_column("Description", style="green")
+        
+        code_formats.add_row("```language:filepath", "Code with syntax highlighting for language and file path")
+        code_formats.add_row("```startLine:endLine:filepath", "Code with line numbers and file path")
+        code_formats.add_row("```language:startLine:endLine:filepath", "Code with language, line numbers, and file path")
+        
+        self.console.print(code_formats)
         
     def show_files_in_context(self):
         """Show files currently in context"""
@@ -380,8 +393,34 @@ class OpenCursorApp:
             
         return web_table
         
+    def _display_file_with_location(self, file_path: str, content: str, start_line: int = 1, end_line: Optional[int] = None):
+        """
+        Display file content with location information
+        
+        Args:
+            file_path: Path to the file
+            content: Content of the file
+            start_line: Starting line number
+            end_line: Ending line number
+        """
+        # Determine syntax highlighting based on file extension
+        extension = os.path.splitext(file_path)[1].lstrip('.')
+        
+        # Create the title with location information
+        location_info = f"{start_line}"
+        if end_line:
+            location_info += f":{end_line}"
+        title = f"[{ORANGE_COLOR} bold]File: {file_path} (Lines {location_info})[/{ORANGE_COLOR} bold]"
+        
+        # Create syntax object with highlighting
+        syntax = Syntax(content, extension or "text", theme="monokai", line_numbers=True, 
+                        start_line=start_line, highlight_lines=set(range(start_line, (end_line or start_line) + 1)))
+        
+        # Display in a panel
+        self.console.print(Panel(syntax, title=title, border_style=ORANGE_COLOR, expand=True))
+        
     def _format_code_blocks(self, result: str) -> str:
-        """Format code blocks with syntax highlighting"""
+        """Format code blocks with syntax highlighting and file location information"""
         parts = result.split("```")
         formatted_parts = []
         
@@ -391,15 +430,83 @@ class OpenCursorApp:
                 formatted_parts.append(part)
             else:
                 # Code block
-                lang_and_code = part.split("\n", 1)
-                if len(lang_and_code) > 1:
+                # Check if there's a file path specified with line numbers (format: language:start_line:end_line:filepath or start_line:end_line:filepath)
+                file_path = None
+                start_line = 1
+                end_line = None
+                lang = "text"  # Default language
+                code = part
+                
+                first_line = part.split("\n", 1)[0].strip() if "\n" in part else part.strip()
+                
+                # Handle format with line numbers like ```python:10:20:path/to/file.py or ```10:20:path/to/file.py
+                if first_line.count(':') >= 2 and any(c.isdigit() for c in first_line.split(':', 1)[0]):
+                    components = first_line.split(':')
+                    
+                    if components[0].isdigit():
+                        # Format: ```line:line:filepath
+                        try:
+                            start_line = int(components[0])
+                            end_line = int(components[1]) if len(components) > 2 else start_line
+                            file_path = ':'.join(components[2:]) if len(components) > 2 else None
+                            lang = self.extension_to_language(file_path) if file_path else "text"
+                        except ValueError:
+                            pass
+                    else:
+                        # Format: ```language:line:line:filepath
+                        try:
+                            lang = components[0]
+                            start_line = int(components[1])
+                            end_line = int(components[2]) if len(components) > 3 else start_line
+                            file_path = ':'.join(components[3:]) if len(components) > 3 else None
+                        except ValueError:
+                            pass
+                    
+                    # Extract the code (everything after the first line)
+                    if "\n" in part:
+                        code = part.split("\n", 1)[1]
+                
+                # Handle format like ```python:path/to/file.py or ```path/to/file.py
+                elif ":" in first_line:
+                    lang_and_path = first_line.split(":", 1)
+                    
+                    if len(lang_and_path) > 1:
+                        lang = lang_and_path[0]
+                        file_path = lang_and_path[1]
+                        # Extract the code (everything after the first line)
+                        if "\n" in part:
+                            code = part.split("\n", 1)[1]
+                
+                # Handle standard markdown code blocks
+                elif "\n" in part:
+                    lang_and_code = part.split("\n", 1)
                     lang = lang_and_code[0].strip()
                     code = lang_and_code[1]
-                    syntax = Syntax(code, lang, theme="monokai", line_numbers=True)
-                    formatted_parts.append(syntax)
+                
+                # Create syntax object with highlighting
+                syntax = Syntax(
+                    code, 
+                    lang, 
+                    theme="monokai", 
+                    line_numbers=True,
+                    start_line=start_line,
+                    highlight_lines=set(range(start_line, (end_line or start_line) + 1)) if start_line != 1 else None
+                )
+                
+                # If we have a file path, add it to a panel title
+                if file_path:
+                    from rich.panel import Panel
+                    location_info = f"{start_line}"
+                    if end_line and end_line != start_line:
+                        location_info += f":{end_line}"
+                        
+                    panel = Panel(
+                        syntax,
+                        title=f"[{ORANGE_COLOR} bold]File: {file_path} (Lines {location_info})[/{ORANGE_COLOR} bold]",
+                        border_style=ORANGE_COLOR
+                    )
+                    formatted_parts.append(panel)
                 else:
-                    # If no language specified
-                    syntax = Syntax(part, "text", theme="monokai")
                     formatted_parts.append(syntax)
                     
         return formatted_parts
@@ -440,8 +547,11 @@ class OpenCursorApp:
             )
             
             # Create a group with just the thinking and response panels
-            from rich.console import Group
-            return Group(think_panel, response_panel)
+            # from rich.console import Group
+            # return Group(think_panel, response_panel)
+            return Markdown(response)
+
+        
         else:
             # Check for execution summary in regular response
             self.execution_summary = ""
@@ -503,6 +613,66 @@ class OpenCursorApp:
                 
         self.console.print(table)
     
+    def _display_diff(self, file_path: str):
+        """Display git diff for a file with syntax highlighting"""
+        try:
+            # Check if the file exists
+            full_path = Path(file_path).resolve()
+            if not full_path.exists():
+                self.console.print(f"[error]File not found: {file_path}[/error]")
+                return
+                
+            # Get git diff
+            try:
+                # Check if file is in a git repository
+                result = subprocess.run(
+                    ['git', 'ls-files', '--error-unmatch', str(full_path)], 
+                    cwd=self.current_workspace,
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    check=False
+                )
+                
+                if result.returncode != 0:
+                    # File is not tracked by git
+                    self.console.print("[warning]File is not tracked by git.[/warning]")
+                    return
+                
+                # Run git diff
+                diff_result = subprocess.run(
+                    ['git', 'diff', str(full_path)], 
+                    cwd=self.current_workspace,
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    check=False
+                )
+                
+                if diff_result.returncode != 0:
+                    self.console.print(f"[error]Error running git diff: {diff_result.stderr}[/error]")
+                    return
+                
+                diff_text = diff_result.stdout.strip()
+                if not diff_text:
+                    self.console.print("[info]No changes detected by git.[/info]")
+                    return
+                
+                # Display the diff with syntax highlighting
+                syntax = Syntax(diff_text, "diff", theme="monokai", line_numbers=True)
+                self.console.print(Panel(
+                    syntax,
+                    title=f"[{ORANGE_COLOR} bold]Git Diff: {file_path}[/{ORANGE_COLOR} bold]",
+                    border_style=ORANGE_COLOR,
+                    expand=True
+                ))
+                
+            except Exception as e:
+                self.console.print(f"[error]Error running git diff: {str(e)}[/error]")
+                
+        except Exception as e:
+            self.console.print(f"[error]Error: {str(e)}[/error]")
+            
     async def process_command(self, command: str, args: str) -> bool:
         """Process a command and return whether to continue running"""
         if command == "/exit":
@@ -562,6 +732,8 @@ class OpenCursorApp:
             self.clear_context()
         elif command == "/repomap":
             self.generate_repo_map()
+        elif command == "/diff":
+            self._display_diff(args)
         elif command == "/focus":
             if os.path.exists(args):
                 self.add_file_to_context(args)
@@ -570,10 +742,8 @@ class OpenCursorApp:
                     with open(args, 'r') as f:
                         content = f.read()
                     
-                    # Determine syntax highlighting based on file extension
-                    extension = os.path.splitext(args)[1].lstrip('.')
-                    syntax = Syntax(content, extension or "text", line_numbers=True, theme="monokai")
-                    self.console.print(Panel(syntax, title=f"[{ORANGE_COLOR} bold]File: {args}[/{ORANGE_COLOR} bold]", border_style=ORANGE_COLOR, expand=True))
+                    # Use the new display method for better visualization
+                    self._display_file_with_location(args, content)
                 except Exception as e:
                     self.console.print(f"[error]Error reading file: {e}[/error]")
             else:
@@ -688,6 +858,43 @@ class OpenCursorApp:
                 self.console.print(f"[error]Error:[/error] {str(e)}")
         
         self.console.print(f"[{ORANGE_COLOR} bold]Thank you for using OpenCursor![/{ORANGE_COLOR} bold]")
+
+    def extension_to_language(self, file_path):
+        """Convert file extension to language name for syntax highlighting"""
+        if not file_path:
+            return "text"
+        
+        ext_map = {
+            ".py": "python",
+            ".js": "javascript",
+            ".jsx": "jsx",
+            ".ts": "typescript",
+            ".tsx": "tsx",
+            ".html": "html",
+            ".css": "css",
+            ".json": "json",
+            ".md": "markdown",
+            ".sh": "bash",
+            ".bash": "bash",
+            ".c": "c",
+            ".cpp": "cpp",
+            ".h": "cpp",
+            ".java": "java",
+            ".go": "go",
+            ".rs": "rust",
+            ".rb": "ruby",
+            ".php": "php",
+            ".yaml": "yaml",
+            ".yml": "yaml",
+            ".toml": "toml",
+            ".xml": "xml",
+            ".sql": "sql",
+            ".diff": "diff",
+            ".gitignore": "gitignore",
+        }
+        
+        ext = os.path.splitext(file_path)[1].lower()
+        return ext_map.get(ext, "text")
 
 async def main():
     """Main entry point"""

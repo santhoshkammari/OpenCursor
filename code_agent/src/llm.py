@@ -67,16 +67,16 @@ class LLMClient:
         THINKING_MODE=False
         # fake stream with 0.1 second delay
         
-        for token in response.message.content.split(" "):
-            if START_THINK_TOKEN in token:
-                THINKING_MODE=True
-                print("Thinking...")
-            elif END_THINK_TOKEN in token:
-                THINKING_MODE=False
-                print("\n\nDone thinking...")   
-            print(token+" ", end="", flush=True)
-            time.sleep(0.01)
-        print("\n\n")
+        # for token in response.message.content.split(" "):
+        #     if START_THINK_TOKEN in token:
+        #         THINKING_MODE=True
+        #         print("Thinking...")
+        #     elif END_THINK_TOKEN in token:
+        #         THINKING_MODE=False
+        #         print("\n\nDone thinking...")   
+        #     print(token+" ", end="", flush=True)
+        #     time.sleep(0.01)
+        # print("\n\n")
 
 
         # Add assistant response to conversation

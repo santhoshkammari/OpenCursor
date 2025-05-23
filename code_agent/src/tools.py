@@ -284,7 +284,8 @@ class Tools:
                         )
                         diff_text = ''.join(diff)
                         if diff_text:
-                            result += diff_text
+                            # Format the diff with syntax highlighting using triple backticks
+                            result += f"```diff\n{diff_text}\n```"
                 
                 return result
                 
@@ -451,7 +452,8 @@ class Tools:
                     )
                     diff_text = ''.join(diff)
                     if diff_text:
-                        result += diff_text
+                        # Format the diff with syntax highlighting using triple backticks
+                        result += f"```diff\n{diff_text}\n```"
                 
                 return result
                 

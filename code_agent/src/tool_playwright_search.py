@@ -169,7 +169,6 @@ class PlaywrightSearch:
 # Tool function to be registered with the Tools class
 async def web_search_playwright(
     search_term: str, 
-    search_provider: str = "bing", 
     num_results: int = 10,
     explanation: str = ""
 ) -> str:
@@ -185,7 +184,7 @@ async def web_search_playwright(
     Returns:
         str: Formatted search results
     """
-    search_agent = PlaywrightSearch(search_provider=search_provider)
+    search_agent = PlaywrightSearch(search_provider="bing")
     
     try:
         results = await search_agent.search(search_term, num_results)
@@ -225,11 +224,6 @@ def register_playwright_search_tool(tools_instance):
                         'search_term': {
                             'type': 'string',
                             'description': 'The search query to look up on the web'
-                        },
-                        'search_provider': {
-                            'type': 'string',
-                            'description': 'Search engine to use (bing or duckduckgo)',
-                            'enum': ['bing', 'duckduckgo']
                         },
                         'num_results': {
                             'type': 'integer',
