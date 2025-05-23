@@ -13,22 +13,25 @@ An AI-powered code agent for workspace operations.
 
 ## Installation
 
-### Using Poetry (recommended)
+### Using pip (recommended)
+
+```bash
+pip install -U opencursor
+```
+
+
+### Using Poetry 
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/opencursor.git
+git clone https://github.com/santhoshkammari/OpenCursor.git
 cd opencursor
 
 # Install with Poetry
 poetry install
 ```
 
-### Using pip
 
-```bash
-pip install git+https://github.com/yourusername/opencursor.git
-```
 
 ## Usage
 
