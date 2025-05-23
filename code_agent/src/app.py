@@ -30,7 +30,6 @@ from prompt_toolkit.shortcuts import CompleteStyle
 
 from code_agent.src.agent import CodeAgent
 
-# ASCII Art for OPENCURSOR
 OPENCURSOR_LOGO_V1 = """
   ____  _____  ______ _   _  _____ _    _ _____   _____  ____  _____  
  / __ \|  __ \|  ____| \ | |/ ____| |  | |  __ \ / ____|/ __ \|  __ \ 
