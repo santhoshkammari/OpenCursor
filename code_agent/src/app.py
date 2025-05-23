@@ -325,7 +325,21 @@ class OpenCursorApp:
                 # Default formatting for other tools
                 table.add_row(tool_name, result)
         
-        self.console.print(table)
+        # Add execution summary if available
+        if hasattr(self, 'execution_summary') and self.execution_summary:
+            summary_panel = Panel(
+                Markdown(self.execution_summary),
+                title=f"[{ORANGE_COLOR} bold]Execution Summary[/{ORANGE_COLOR} bold]",
+                border_style=ORANGE_COLOR,
+                box=box.ROUNDED
+            )
+            
+            # Create a group with both the table and summary panel
+            from rich.console import Group
+            result_group = Group(table, summary_panel)
+            self.console.print(result_group)
+        else:
+            self.console.print(table)
         
     def _format_web_search_results(self, result: str) -> str:
         """Format web search results into a nested table"""
@@ -390,43 +404,36 @@ class OpenCursorApp:
             think_panel = Panel(
                 Markdown(think_content),  # Use Markdown for better formatting
                 title=f"[{ORANGE_COLOR} bold]Thinking Process[/{ORANGE_COLOR} bold]",
-                border_style="cyan",
+                border_style=ORANGE_COLOR,
                 box=box.ROUNDED
             )
             
             # If there's an execution summary, split it out too
-            execution_summary = ""
+            self.execution_summary = ""
             if "[Execution Summary]" in regular_response:
                 summary_start = regular_response.find("[Execution Summary]")
-                execution_summary = regular_response[summary_start:].strip()
+                self.execution_summary = regular_response[summary_start:].strip()
                 regular_response = regular_response[:summary_start].strip()
             
             # Create response panel
             response_panel = Panel(
                 Markdown(regular_response),  # Use Markdown for better formatting
-                border_style="green",
+                border_style=ORANGE_COLOR,
+                title=f"[{ORANGE_COLOR} bold]Response[/{ORANGE_COLOR} bold]",
                 box=box.ROUNDED
             )
             
-            # Create summary panel if exists
-            summary_panel = None
-            if execution_summary:
-                summary_panel = Panel(
-                    Markdown(execution_summary),  # Use Markdown for better formatting
-                    title=f"[{ORANGE_COLOR} bold]Execution Summary[/{ORANGE_COLOR} bold]",
-                    border_style="yellow",
-                    box=box.ROUNDED
-                )
-            
-            # Create a group of panels rather than a layout for better rendering
+            # Create a group with just the thinking and response panels
             from rich.console import Group
-            
-            panels = [think_panel, response_panel]
-            if summary_panel:
-                panels.append(summary_panel)
-                
-            return Group(*panels)
+            return Group(think_panel, response_panel)
         else:
+            # Check for execution summary in regular response
+            self.execution_summary = ""
+            if "[Execution Summary]" in response:
+                summary_start = response.find("[Execution Summary]")
+                self.execution_summary = response[summary_start:].strip()
+                response = response[:summary_start].strip()
+            
             # Return the original response if no think tags
             return Markdown(response)  # Use Markdown for better formatting
         
@@ -586,6 +593,9 @@ class OpenCursorApp:
         # Replace the method with our wrapped version
         self.agent.tools_manager.process_tool_calls = process_tool_calls_with_capture
         
+        # Initialize execution summary
+        self.execution_summary = ""
+        
         running = True
         while running:
             try:
@@ -597,16 +607,22 @@ class OpenCursorApp:
                     user_input = initial_query
                     initial_query = None  # Reset after first use
                 else:
-                    # We need to run this in a separate thread since prompt_toolkit is blocking
+                    # Create a styled input panel title
                     prompt_message = f"{self.current_mode}> "
                     
-                    # Use the prompt_toolkit session directly with proper styling
+                    # Display a styled input panel title
+                    self.console.print(f"[{ORANGE_COLOR} bold]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Enter your command or query ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/{ORANGE_COLOR} bold]")
+                    
+                    # Use the prompt_toolkit session with proper styling
                     user_input = await asyncio.to_thread(
                         lambda: self.session.prompt(
-                            prompt_message,
-                            # Don't override the completer settings that are already in the session
+                            HTML(f"<prompt>{prompt_message}</prompt> "),
+                            style=self.style
                         )
                     )
+                    
+                    # Clear the previous line to make the UI cleaner
+                    self.console.print("")
                 
                 # Handle @ file references
                 if user_input.startswith('@'):
