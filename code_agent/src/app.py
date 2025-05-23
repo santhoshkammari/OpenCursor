@@ -30,7 +30,7 @@ from prompt_toolkit.shortcuts import CompleteStyle
 from code_agent.src.agent import CodeAgent
 
 # ASCII Art for OPENCURSOR
-OPENCURSOR_LOGO = """
+OPENCURSOR_LOGO_V1 = """
   ____  _____  ______ _   _  _____ _    _ _____   _____  ____  _____  
  / __ \|  __ \|  ____| \ | |/ ____| |  | |  __ \ / ____|/ __ \|  __ \ 
 | |  | | |__) | |__  |  \| | |    | |  | | |__) | (___ | |  | | |__) |
@@ -38,6 +38,22 @@ OPENCURSOR_LOGO = """
 | |__| | |    | |____| |\  | |____| |__| | | \ \ ____) | |__| | | \ \ 
  \____/|_|    |______|_| \_|\_____|\____/|_|  \_\_____/ \____/|_|  \_\\
                                                                       
+"""
+
+OPENCURSOR_LOGO = """
+ ██████╗ ██████╗ ███████╗███╗   ██╗
+██╔═══██╗██╔══██╗██╔════╝████╗  ██║
+██║   ██║██████╔╝█████╗  ██╔██╗ ██║
+██║   ██║██╔═══╝ ██╔══╝  ██║╚██╗██║
+╚██████╔╝██║     ███████╗██║ ╚████║
+ ╚═════╝ ╚═╝     ╚══════╝╚═╝  ╚═══╝
+                                   
+ ██████╗██╗   ██╗██████╗ ███████╗ ██████╗ ██████╗ 
+██╔════╝██║   ██║██╔══██╗██╔════╝██╔═══██╗██╔══██╗
+██║     ██║   ██║██████╔╝███████╗██║   ██║██████╔╝
+██║     ██║   ██║██╔══██╗╚════██║██║   ██║██╔══██╗
+╚██████╗╚██████╔╝██║  ██║███████║╚██████╔╝██║  ██║
+ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═╝
 """
 
 # Custom orange theme color
@@ -616,11 +632,10 @@ class OpenCursorApp:
                     # Use the prompt_toolkit session with proper styling
                     user_input = await asyncio.to_thread(
                         lambda: self.session.prompt(
-                            HTML(f"<prompt>{prompt_message}</prompt> "),
-                            style=self.style
+                            HTML(f"<i>{prompt_message}</i> "),
                         )
                     )
-                    
+
                     # Clear the previous line to make the UI cleaner
                     self.console.print("")
                 
