@@ -368,43 +368,7 @@ async def test():
             # await browser.keyboard_press_enter()
             await asyncio.sleep(5)  # Give time for search input to appear
                 
-                # Test filling the search input
-                # if success:
-                #     # Find the search input element that appears after clicking
-                #     search_input_index = await dom_service.get_search_input_element()
-                #     if search_input_index is not None:
-                #         print(f"Found search input element with index: {search_input_index}")
-                        
-                #         search_text = "function examples"
-                #         print(f"Filling search input with: '{search_text}'")
-                #         fill_success = await dom_service.fill_element(search_input_index, search_text)
-                #         if fill_success:
-                #             print("Successfully filled search input")
-                #             await asyncio.sleep(1)  # Short pause before pressing Enter
-                            
-                #             # Press Enter to submit the search
-                #             print("Pressing Enter to submit search")
-                #             enter_success = await dom_service.press_enter(search_input_index)
-                #             if enter_success:
-                #                 print("Successfully submitted search query")
-                #                 await asyncio.sleep(3)  # Give time to see search results
-                #             else:
-                #                 print("Failed to press Enter")
-                #         else:
-                #             print("Failed to fill search input")
-                #     else:
-                #         print("Search input element not found after clicking search button")
-                #         # Try a direct approach as fallback
-                #         try:
-                #             await browser.page.fill("input[type='search']", "function examples")
-                #             print("Filled search input using direct selector")
-                #             await asyncio.sleep(1)
-                #             await browser.page.keyboard.press("Enter")
-                #             print("Pressed Enter using direct keyboard method")
-                #             await asyncio.sleep(3)
-                #         except Exception as e:
-                #             print(f"Direct approach also failed: {str(e)}")
-                
+               
         except Exception as e:
             print(f"Error with URL {url}: {str(e)}")
             continue
