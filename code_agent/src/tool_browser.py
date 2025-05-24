@@ -195,7 +195,8 @@ class PlaywrightBrowser:
             
             # Convert DOM elements to a nicely formatted dictionary
             results = []
-            for idx, element in dom_state.selector_map.items():
+            for idx, element in dom_state.selector_map.items(
+                ):
                 # Only include visible and interactive elements and in viewport and has href
                 if element.is_visible and element.is_interactive and element.is_in_viewport and element.attributes.get("href"):
                     href = element.attributes.get("href", "")

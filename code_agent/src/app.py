@@ -218,7 +218,7 @@ class OpenCursorApp:
         self.tool_results = []  # Store recent tool results
         
         # Current mode (default is "OpenCursor")
-        self.current_mode = "OpenCursor"
+        self.current_mode = "Agent"
         
         # Define prompt styles
         self.style = Style.from_dict({
@@ -901,7 +901,7 @@ class OpenCursorApp:
                     # Use the prompt_toolkit session with proper styling
                     user_input = await asyncio.to_thread(
                         lambda: self.session.prompt(
-                            HTML(f"<i>{prompt_message}</i> "),
+                            HTML(f"<b>{prompt_message}</b> "),
                         )
                     )
 
