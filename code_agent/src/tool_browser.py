@@ -285,16 +285,37 @@ class ExtenedDomService(DomService):
             dom_state = await self.get_clickable_elements()
             if element_key in dom_state.selector_map:
                 element = dom_state.selector_map[element_key]
-                # Use the selector to click the element
-                if hasattr(element, 'selector') and element.selector:
-                    try:
-                        await self.page.click(element.selector)
-                        print(f"Clicked element with selector: {element.selector}")
+                print(f"Element details: {element}")
+                
+                try:
+                    # Try clicking by aria-label attribute
+                    if hasattr(element, 'attributes') and element.attributes.get('aria-label'):
+                        aria_label = element.attributes.get('aria-label')
+                        selector = f"button[aria-label='{aria_label}']"
+                        await self.page.click(selector)
+                        print(f"Clicked element with aria-label selector: {selector}")
                         return True
-                    except Exception as e:
-                        print(f"Error clicking element: {str(e)}")
-                else:
-                    print(f"Element with key {element_key} has no selector")
+                    # Try clicking by xpath (need to properly format the xpath)
+                    elif hasattr(element, 'xpath') and element.xpath:
+                        # Make sure xpath starts with // for relative path
+                        xpath = element.xpath
+                        if not xpath.startswith('//'):
+                            xpath = '//' + xpath.lstrip('/')
+                        await self.page.click(xpath)
+                        print(f"Clicked element with XPath: {xpath}")
+                        return True
+                    else:
+                        print(f"Could not find a way to click element with key {element_key}")
+                except Exception as e:
+                    print(f"Error clicking element: {str(e)}")
+                    
+                    # Fallback to direct click by tag and aria-label
+                    try:
+                        await self.page.click("button[aria-label='Search']")
+                        print("Clicked search button using direct selector")
+                        return True
+                    except Exception as e2:
+                        print(f"Fallback click also failed: {str(e2)}")
             else:
                 print(f"Element with key {element_key} not found in selector map")
         return False
@@ -311,23 +332,34 @@ async def test():
     print("\n=== Testing browser navigation ===")
     browser = PlaywrightBrowser(headless=False)
     await browser.initialize()
-    for url in urls:
-        await browser.navigate_to(url)
-        dom_service = ExtenedDomService(browser.page)
-        search_keyword_index = await dom_service.get_search_keyword_index()
-        rich.print(search_keyword_index)
-        
-        # Click the search element if found
-        if search_keyword_index is not None:
-            print(f"Clicking search element with index: {search_keyword_index}")
-            await dom_service.click_element(search_keyword_index)
-            await asyncio.sleep(2)  # Give time to see the search box open
-        else:
-            print("Search element not found")
-            
-        break
-    await browser.close()
     
+    # Try each URL until one works
+    for url in urls:
+        try:
+            print(f"Navigating to {url}")
+            await browser.navigate_to(url)
+            
+            # Wait to ensure page is loaded
+            await asyncio.sleep(2)
+            
+            dom_service = ExtenedDomService(browser.page)
+            search_keyword_index = await dom_service.get_search_keyword_index()
+            
+            if search_keyword_index is not None:
+                print(f"Found search element with index: {search_keyword_index}")
+                rich.print(search_keyword_index)
+                
+                # Click the search element
+                success = await dom_service.click_element(search_keyword_index)
+                await asyncio.sleep(2)  # Give time to see the results
+                break  # Exit the loop if we found a search element
+            else:
+                print("Search element not found, trying next URL")
+        except Exception as e:
+            print(f"Error with URL {url}: {str(e)}")
+            continue
+    
+    await browser.close()
     print("\nTests completed successfully!")
 
 if __name__ == "__main__":
