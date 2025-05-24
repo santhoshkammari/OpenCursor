@@ -285,37 +285,57 @@ class ExtenedDomService(DomService):
         print("Looking for search input element among these elements:")
         rich.print(dom_state.selector_map)
         
-        # Look for input elements with search-related attributes
+        # First, prioritize actual input elements with search-related attributes
         for element_key, element in dom_state.selector_map.items():
-            # Check if it's an input element or has input in the tag name
-            if (hasattr(element, 'tag_name') and 
-                (element.tag_name == "input" or 'input' in str(element.tag_name).lower())):
-                print(f"Found potential input element: {element}")
-                # Check for common search input attributes
-                if (element.attributes.get("type") == "search" or 
-                    "search" in element.attributes.get("class", "").lower() or 
-                    "search" in element.attributes.get("id", "").lower() or 
-                    "search" in element.attributes.get("name", "").lower() or
-                    "search" in element.attributes.get("placeholder", "").lower()):
-                    return element_key
-            
-            # Also check if any attribute contains 'search'
+            # Check if it's specifically an input element with type="search"
+            if (hasattr(element, 'tag_name') and element.tag_name == "input" and
+                hasattr(element, 'attributes') and element.attributes.get("type") == "search"):
+                print(f"Found search input element: {element}")
+                return element_key
+        
+        # Next, look for any input element
+        for element_key, element in dom_state.selector_map.items():
+            if hasattr(element, 'tag_name') and element.tag_name == "input":
+                print(f"Found input element: {element}")
+                return element_key
+        
+        # Finally, check for elements with search-related attributes
+        for element_key, element in dom_state.selector_map.items():
             if hasattr(element, 'attributes'):
                 for attr_name, attr_value in element.attributes.items():
                     if isinstance(attr_value, str) and 'search' in attr_value.lower():
-                        print(f"Found element with search in attributes: {element}")
-                        return element_key
+                        # Check if it's not a label or button (which we don't want)
+                        if not (hasattr(element, 'tag_name') and element.tag_name in ["label", "button"]):
+                            print(f"Found element with search in attributes: {element}")
+                            return element_key
         
-        # If we couldn't find a search input, try to find any input element
-        for element_key, element in dom_state.selector_map.items():
-            if hasattr(element, 'tag_name') and element.tag_name == "input":
-                print(f"Falling back to first input element: {element}")
-                return element_key
+        # If nothing else found, try to find the element by direct selector
+        try:
+            # Try to locate the search input directly using common selectors
+            input_locator = await self.page.query_selector("input[type='search']")
+            if input_locator:
+                print("Found search input using direct selector: input[type='search']")
+                # We found it directly but can't return a key, so we'll use a special flag
+                # The fill_element and press_enter methods will need to handle this case
+                return "direct_selector:input[type='search']"
+        except Exception as e:
+            print(f"Error finding search input directly: {str(e)}")
                 
         return None
     
     async def fill_element(self, element_key, text):
         """Fill a form element with text by its key in the selector map"""
+        # Handle direct selector case
+        if isinstance(element_key, str) and element_key.startswith("direct_selector:"):
+            selector = element_key.split(":", 1)[1]
+            try:
+                await self.page.fill(selector, text)
+                print(f"Filled element with direct selector: {selector}")
+                return True
+            except Exception as e:
+                print(f"Error filling element with direct selector: {str(e)}")
+                return False
+        
         if element_key is not None:
             dom_state = await self.get_clickable_elements()
             if element_key in dom_state.selector_map:
@@ -346,21 +366,115 @@ class ExtenedDomService(DomService):
                         await self.page.fill(selector, text)
                         print(f"Filled element with ID selector: {selector}")
                         return True
+                    # Try by tag name and type if it's an input
+                    elif hasattr(element, 'tag_name') and element.tag_name == "input":
+                        input_type = element.attributes.get('type', '')
+                        selector = f"input[type='{input_type}']"
+                        await self.page.fill(selector, text)
+                        print(f"Filled element with tag and type selector: {selector}")
+                        return True
                     else:
                         print(f"Could not find a way to fill element with key {element_key}")
                 except Exception as e:
                     print(f"Error filling element: {str(e)}")
                     
-                    # Fallback to direct fill by tag and aria-label
+                    # Fallback to direct fill by common selectors
                     try:
-                        await self.page.fill("input[aria-label='Search']", text)
-                        print("Filled search input using direct selector")
-                        return True
+                        # Try common search input selectors
+                        selectors = [
+                            "input[type='search']",
+                            "input[aria-label='Search']",
+                            "input.search",
+                            "input#search",
+                            "input[name='search']",
+                            "input[placeholder*='search' i]"
+                        ]
+                        
+                        for selector in selectors:
+                            try:
+                                await self.page.fill(selector, text)
+                                print(f"Filled search input using selector: {selector}")
+                                return True
+                            except Exception:
+                                continue
+                                
+                        print("All fallback selectors failed")
                     except Exception as e2:
                         print(f"Fallback fill also failed: {str(e2)}")
             else:
                 print(f"Element with key {element_key} not found in selector map")
         return False
+    
+    async def press_enter(self, element_key=None):
+        """Press Enter on an element or the focused element"""
+        try:
+            # Handle direct selector case
+            if isinstance(element_key, str) and element_key.startswith("direct_selector:"):
+                selector = element_key.split(":", 1)[1]
+                try:
+                    await self.page.press(selector, "Enter")
+                    print(f"Pressed Enter on element with direct selector: {selector}")
+                    return True
+                except Exception as e:
+                    print(f"Error pressing Enter with direct selector: {str(e)}")
+                    # Fall back to keyboard.press
+                    await self.page.keyboard.press("Enter")
+                    print("Pressed Enter using keyboard.press as fallback")
+                    return True
+            
+            if element_key is not None:
+                dom_state = await self.get_clickable_elements()
+                if element_key in dom_state.selector_map:
+                    element = dom_state.selector_map[element_key]
+                    print(f"Pressing Enter on element: {element}")
+                    
+                    # Try by aria-label
+                    if hasattr(element, 'attributes') and element.attributes.get('aria-label'):
+                        aria_label = element.attributes.get('aria-label')
+                        selector = f"input[aria-label='{aria_label}']"
+                        await self.page.press(selector, "Enter")
+                        print(f"Pressed Enter on element with aria-label: {aria_label}")
+                        return True
+                    # Try by xpath
+                    elif hasattr(element, 'xpath') and element.xpath:
+                        xpath = element.xpath
+                        if not xpath.startswith('//'):
+                            xpath = '//' + xpath.lstrip('/')
+                        await self.page.press(xpath, "Enter")
+                        print(f"Pressed Enter on element with XPath: {xpath}")
+                        return True
+                    # Try by id
+                    elif hasattr(element, 'attributes') and element.attributes.get('id'):
+                        id_value = element.attributes.get('id')
+                        selector = f"#{id_value}"
+                        await self.page.press(selector, "Enter")
+                        print(f"Pressed Enter on element with ID: {id_value}")
+                        return True
+                    # Try by tag name and type if it's an input
+                    elif hasattr(element, 'tag_name') and element.tag_name == "input":
+                        input_type = element.attributes.get('type', '')
+                        selector = f"input[type='{input_type}']"
+                        await self.page.press(selector, "Enter")
+                        print(f"Pressed Enter on element with tag and type selector: {selector}")
+                        return True
+                else:
+                    print(f"Element with key {element_key} not found in selector map")
+            
+            # If no element_key provided or element not found, press Enter on active element
+            await self.page.keyboard.press("Enter")
+            print("Pressed Enter on active element")
+            return True
+            
+        except Exception as e:
+            print(f"Error pressing Enter: {str(e)}")
+            try:
+                # Last resort fallback
+                await self.page.keyboard.press("Enter")
+                print("Pressed Enter using keyboard.press as last resort")
+                return True
+            except Exception as e2:
+                print(f"Even keyboard.press failed: {str(e2)}")
+                return False
     
     async def click_element(self, element_key):
         """Click on an element by its key in the selector map"""
@@ -448,7 +562,16 @@ async def test():
                         fill_success = await dom_service.fill_element(search_input_index, search_text)
                         if fill_success:
                             print("Successfully filled search input")
-                            await asyncio.sleep(2)  # Give time to see the filled input
+                            await asyncio.sleep(1)  # Short pause before pressing Enter
+                            
+                            # Press Enter to submit the search
+                            print("Pressing Enter to submit search")
+                            enter_success = await dom_service.press_enter(search_input_index)
+                            if enter_success:
+                                print("Successfully submitted search query")
+                                await asyncio.sleep(3)  # Give time to see search results
+                            else:
+                                print("Failed to press Enter")
                         else:
                             print("Failed to fill search input")
                     else:
@@ -457,9 +580,12 @@ async def test():
                         try:
                             await browser.page.fill("input[type='search']", "function examples")
                             print("Filled search input using direct selector")
-                            await asyncio.sleep(2)
+                            await asyncio.sleep(1)
+                            await browser.page.keyboard.press("Enter")
+                            print("Pressed Enter using direct keyboard method")
+                            await asyncio.sleep(3)
                         except Exception as e:
-                            print(f"Direct fill approach also failed: {str(e)}")
+                            print(f"Direct approach also failed: {str(e)}")
                 
                 break  # Exit the loop if we found a search element
             else:
