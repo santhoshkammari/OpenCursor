@@ -71,8 +71,21 @@ class PlaywrightBrowser:
                 
                 try:
                     if hasattr(element, 'attributes') and element.attributes.get('href'):
-                        await self.navigate_to(element.attributes.get('href'))
-                        print(f"Clicked element with href: {element.attributes.get('href')}")
+                        href = element.attributes.get('href')
+                        # Handle relative URLs by combining with the current page's base URL
+                        if href.startswith('/'):
+                            # Extract base URL (protocol + domain)
+                            current_url = self.page.url
+                            base_url_match = re.match(r'(https?://[^/]+)', current_url)
+                            if base_url_match:
+                                base_url = base_url_match.group(1)
+                                absolute_url = f"{base_url}{href}"
+                                await self.navigate_to(absolute_url)
+                                print(f"Clicked element with relative href: {href} -> {absolute_url}")
+                                return True
+                        # Handle absolute URLs directly
+                        await self.navigate_to(href)
+                        print(f"Clicked element with href: {href}")
                         return True
                     # Try clicking by aria-label attribute
                     elif hasattr(element, 'attributes') and element.attributes.get('aria-label'):
