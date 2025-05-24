@@ -50,6 +50,10 @@ class Tools:
                     else:
                         result = function(**function_args)
                         
+                    # Convert result to string if it's not already a string
+                    if not isinstance(result, str):
+                        result = str(result)
+                        
                     # Add the result to the LLM client
                     llm_client.add_message(role="tool", content=result, name=function_name)
                     results.append(result)
