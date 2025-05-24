@@ -51,8 +51,10 @@ class Tools:
                         result = function(**function_args)
                         
                     # Convert result to string if it's not already a string
-                    if not isinstance(result, str):
+                    if isinstance(result,int):
                         result = str(result)
+                    if isinstance(result, list):
+                        result = "\n".join(result)
                         
                     # Add the result to the LLM client
                     llm_client.add_message(role="tool", content=result, name=function_name)
@@ -276,9 +278,12 @@ class Tools:
 
             ## print params nicely in table format using rich
             console = Console()
-            console.print(f"[cyan]Target File:[/cyan] {target_file}")
+            console.print(f"[cyan]{instructions} in {target_file}[/cyan]")
             console.print(f"[cyan]Code Edit:[/cyan] {code_edit}")
-            console.print(f"[cyan]Instructions:[/cyan] {instructions}")
+            # show in panel of this code_edit
+            
+
+
             
             try:
                 # Create directory if it doesn't exist
