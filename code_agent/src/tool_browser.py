@@ -137,10 +137,11 @@ class PlaywrightBrowser:
         await self.page.wait_for_load_state("networkidle", timeout=10000)
 
     async def click_search_k_by_domelement_approach(self):
-        dom_service = DomService(self.page)
-        search_keyword_index = await dom_service.get_search_keyword_index()
-        success = await dom_service.click_element(search_keyword_index)
-        return success
+        """Find and click the search element in the DOM"""
+        search_keyword_index = await self.get_search_keyword_index()
+        if search_keyword_index is not None:
+            return await self.click_element_by_index(search_keyword_index)
+        return False
     
     async def click_search_k_by_direct_keyboard_approach(self):
         await self.keyboard_press('Control+k')
@@ -154,17 +155,26 @@ class PlaywrightBrowser:
         if self.playwright:
             await self.playwright.stop()
 
-    async def search_inside_browser_using_ctrl_plus_k_approach(self, query: str) -> dict:
+    async def search_inside_webpage_using_keyboard_shortcut(self, query: str, url: str = None) -> dict:
         """
-        Search inside browser using keyboard shortcut Ctrl+K
+        Search within the current webpage using keyboard shortcut (Ctrl+K)
+        
+        This tool searches within documentation or websites that have search functionality 
+        accessible via Ctrl+K keyboard shortcut. It navigates to the URL (if provided),
+        activates the search box with Ctrl+K, enters the query, and returns structured results.
         
         Args:
             query (str): The search query to enter
+            url (str): Optional URL to navigate to before searching. If not provided, uses current page.
             
         Returns:
             dict: Dictionary of search results with clickable elements
         """
         try:
+            # Navigate to URL if provided
+            if url:
+                await self.navigate_to(url)
+            
             # Press Ctrl+K to open search
             await self.keyboard_press('Control+k')
             await asyncio.sleep(1)  # Wait for search input to appear
@@ -198,31 +208,42 @@ class PlaywrightBrowser:
             
             return {
                 "query": query,
+                "url": url or self.page.url,
                 "total_results": len(results),
                 "results": results
             }
         except Exception as e:
-            print(f"Error in search_inside_browser_using_ctrl_plus_k_approach: {str(e)}")
-            return {"error": str(e), "query": query, "results": []}
+            print(f"Error in search_inside_webpage_using_keyboard_shortcut: {str(e)}")
+            return {"error": str(e), "query": query, "url": url or self.page.url, "results": []}
 
-    async def search_inside_browser(self, query: str) -> dict:
+    async def search_inside_webpage_using_dom_element(self, query: str, url: str = None) -> dict:
         """
-        Search inside browser using DOM element approach
+        Search within the current webpage by finding and clicking the search element
+        
+        This tool is a fallback when keyboard shortcut doesn't work. It searches within 
+        documentation or websites by finding the search button/input in the DOM, clicking it,
+        entering the query, and returning structured results.
         
         Args:
             query (str): The search query to enter
+            url (str): Optional URL to navigate to before searching. If not provided, uses current page.
             
         Returns:
             dict: Dictionary of search results with clickable elements
         """
         try:
+            # Navigate to URL if provided
+            if url:
+                await self.navigate_to(url)
+                await asyncio.sleep(2)  # Wait for page to load
+            
             # Get search element index
             search_keyword_index = await self.get_search_keyword_index()
             
             # Click on the search element
             success = await self.click_element_by_index(search_keyword_index)
             if not success:
-                return {"error": "Failed to click search element", "query": query, "results": []}
+                return {"error": "Failed to click search element", "query": query, "url": url or self.page.url, "results": []}
             
             await asyncio.sleep(1)  # Wait for search input to appear
             
@@ -255,12 +276,13 @@ class PlaywrightBrowser:
             
             return {
                 "query": query,
+                "url": url or self.page.url,
                 "total_results": len(results),
                 "results": results
             }
         except Exception as e:
-            print(f"Error in search_inside_browser: {str(e)}")
-            return {"error": str(e), "query": query, "results": []}
+            print(f"Error in search_inside_webpage_using_dom_element: {str(e)}")
+            return {"error": str(e), "query": query, "url": url or self.page.url, "results": []}
 
 
 class PlaywrightSearch:
@@ -455,12 +477,17 @@ def register_playwright_search_tool(tools_instance):
 def register_browser_search_tools(tools_instance):
     """Register browser search tools with the Tools instance"""
     
-    async def search_inside_browser_using_ctrl_plus_k(query: str, explanation: str = "") -> dict:
+    async def search_in_docs_with_keyboard_shortcut(query: str, url: str = None, explanation: str = "") -> dict:
         """
-        Search inside the browser using Ctrl+K approach
+        Search within documentation or website using Ctrl+K keyboard shortcut
+        
+        This is the primary tool for searching within documentation pages or websites
+        that have search functionality accessible via Ctrl+K keyboard shortcut.
+        Use this tool when you need to find specific information within a website's documentation.
         
         Args:
             query (str): The search query to enter
+            url (str): Optional URL to navigate to before searching. If not provided, uses current page.
             explanation (str): Explanation for why this search is being performed
             
         Returns:
@@ -469,17 +496,24 @@ def register_browser_search_tools(tools_instance):
         browser = PlaywrightBrowser(headless=False)
         try:
             await browser.initialize()
-            results = await browser.search_inside_browser_using_ctrl_plus_k_approach(query)
+            if url:
+                await browser.navigate_to(url)
+            results = await browser.search_inside_webpage_using_keyboard_shortcut(query, url)
             return results
         finally:
             await browser.close()
     
-    async def search_inside_browser_by_dom(query: str, explanation: str = "") -> dict:
+    async def search_in_docs_with_dom_element(query: str, url: str = None, explanation: str = "") -> dict:
         """
-        Search inside the browser using DOM element approach
+        Search within documentation or website by finding and clicking the search element
+        
+        This is a fallback tool when the keyboard shortcut approach doesn't work.
+        Use this tool when you need to find specific information within a website's documentation
+        and the primary search_in_docs_with_keyboard_shortcut tool fails.
         
         Args:
             query (str): The search query to enter
+            url (str): Optional URL to navigate to before searching. If not provided, uses current page.
             explanation (str): Explanation for why this search is being performed
             
         Returns:
@@ -488,25 +522,31 @@ def register_browser_search_tools(tools_instance):
         browser = PlaywrightBrowser(headless=False)
         try:
             await browser.initialize()
-            results = await browser.search_inside_browser(query)
+            if url:
+                await browser.navigate_to(url)
+            results = await browser.search_inside_webpage_using_dom_element(query, url)
             return results
         finally:
             await browser.close()
     
     # Register the functions with the Tools instance
     tools_instance.register_function(
-        search_inside_browser_using_ctrl_plus_k,
+        search_in_docs_with_keyboard_shortcut,
         {
             'type': 'function',
             'function': {
-                'name': 'search_inside_browser_using_ctrl_plus_k',
-                'description': 'Search inside the browser using Ctrl+K keyboard shortcut approach',
+                'name': 'search_in_docs_with_keyboard_shortcut',
+                'description': 'Search within documentation or website using Ctrl+K keyboard shortcut. This is the primary tool for searching within documentation pages.',
                 'parameters': {
                     'type': 'object',
                     'properties': {
                         'query': {
                             'type': 'string',
                             'description': 'The search query to enter'
+                        },
+                        'url': {
+                            'type': 'string',
+                            'description': 'Optional URL to navigate to before searching. If not provided, uses current page.'
                         },
                         'explanation': {
                             'type': 'string',
@@ -520,18 +560,22 @@ def register_browser_search_tools(tools_instance):
     )
     
     tools_instance.register_function(
-        search_inside_browser_by_dom,
+        search_in_docs_with_dom_element,
         {
             'type': 'function',
             'function': {
-                'name': 'search_inside_browser_by_dom',
-                'description': 'Search inside the browser using DOM element approach',
+                'name': 'search_in_docs_with_dom_element',
+                'description': 'Search within documentation or website by finding and clicking the search element. Use this as a fallback when the keyboard shortcut approach fails.',
                 'parameters': {
                     'type': 'object',
                     'properties': {
                         'query': {
                             'type': 'string',
                             'description': 'The search query to enter'
+                        },
+                        'url': {
+                            'type': 'string',
+                            'description': 'Optional URL to navigate to before searching. If not provided, uses current page.'
                         },
                         'explanation': {
                             'type': 'string',
