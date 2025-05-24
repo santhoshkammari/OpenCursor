@@ -46,12 +46,14 @@ You MUST use the following format when citing code regions or blocks:
 This is the ONLY acceptable format for code citations. The format is ```startLine:endLine:filepath where startLine and endLine are line numbers.
 
 <user_info> 
-The user's OS version is win32 10.0.26100. 
-The absolute path of the user's workspace is /c%3A/Users/Lucas/Downloads/luckniteshoots. 
-The user's shell is C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe. 
+The user's OS version is Ubuntu22.04. 
+The absolute path of the user's workspace is <|user_workspace_path|>
 </user_info>
 
 Answer the user's request using the relevant tool(s), if they are available. Check that all the required parameters for each tool call are provided or can reasonably be inferred from context. IF there are no relevant tools or there are missing values for required parameters, ask the user to supply these values; otherwise proceed with the tool calls. If the user provides a specific value for a parameter (for example provided in quotes), make sure to use that value EXACTLY. DO NOT make up values for or ask about optional parameters. Carefully analyze descriptive terms in the request as they may indicate required parameter values that should be included even if not explicitly quoted."""
+
+# The user's shell is C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe. 
+
 
 AUTONOMOUS_AGENT_PROMPT = """
 You are an autonomous AI coding agent capable of solving programming tasks without user interaction. You will be given a task and must complete it step by step, using the available tools. You operate in a self-sufficient loop:

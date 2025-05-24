@@ -267,6 +267,12 @@ class Tools:
                 str: Result of the operation
             """
             file_path = os.path.join(self.workspace_root, target_file) if not os.path.isabs(target_file) else target_file
+
+            ## print params nicely in table format using rich
+            console = Console()
+            console.print(f"[cyan]Target File:[/cyan] {target_file}")
+            console.print(f"[cyan]Code Edit:[/cyan] {code_edit}")
+            console.print(f"[cyan]Instructions:[/cyan] {instructions}")
             
             try:
                 # Create directory if it doesn't exist

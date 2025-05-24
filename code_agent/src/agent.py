@@ -87,7 +87,8 @@ class CodeAgent:
         self.llm_client.messages = []
         
         # Set the system prompt to autonomous agent mode
-        self.llm_client.add_message("system", AUTONOMOUS_AGENT_PROMPT)
+        system_prompt = SYSTEM_PROMPT.replace("<|user_workspace_path|>", str(self.tools_manager.workspace_root))
+        self.llm_client.add_message("system", system_prompt)
         
         # Add the initial user message
         self.llm_client.add_message("user", f"Task: {user_message}")
