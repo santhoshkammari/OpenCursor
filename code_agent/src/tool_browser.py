@@ -47,232 +47,13 @@ class PlaywrightBrowser:
         if self.page:
             return await self.page.content()
         return ""
-
-    async def close(self):
-        """Close browser and clean up resources"""
-        if self.context:
-            await self.context.close()
-        if self.browser:
-            await self.browser.close()
-        if self.playwright:
-            await self.playwright.stop()
-
-
-class PlaywrightSearch:
-    """Web search implementation using Playwright"""
-
-    def __init__(self, search_provider: str = 'bing'):
-        """Initialize the search agent"""
-        self.browser = PlaywrightBrowser(headless=False)
-        self.search_provider = search_provider
-
-    async def search(self, query: str, num_results: int = 10) -> List[Dict[str, str]]:
-        """Perform a web search and return results"""
-        try:
-            # Navigate to search engine
-            search_url = f'https://www.{self.search_provider}.com/search?q={query}'
-            await self.browser.navigate_to(search_url)
-            
-            # Get the HTML content
-            html = await self.browser.get_page_html()
-            
-            # Extract search results
-            if self.search_provider == 'bing':
-                search_results = self._extract_bing_results(html, num_results)
-            elif self.search_provider == 'duckduckgo':
-                search_results = self._extract_duckduckgo_results(html, num_results)
-            else:
-                search_results = []
-                
-            return search_results
-        except Exception as e:
-            print(f"Search error: {str(e)}")
-            return []
-        finally:
-            await self.browser.close()
-
-    def _extract_bing_results(self, html: str, max_results: int = 10) -> List[Dict[str, str]]:
-        """Extract search results from Bing HTML content"""
-        soup = BeautifulSoup(html, 'html.parser')
-        results = []
-
-        # Process Bing search results
-        result_elements = soup.find_all('li', class_='b_algo')
-
-        for result_element in result_elements:
-            if len(results) >= max_results:
-                break
-
-            title = None
-            url = None
-            description = None
-
-            # Find title and URL
-            title_header = result_element.find('h2')
-            if title_header:
-                title_link = title_header.find('a')
-                if title_link and title_link.get('href'):
-                    url = title_link['href']
-                    title = title_link.get_text(strip=True)
-
-            # Find description
-            caption_div = result_element.find('div', class_='b_caption')
-            if caption_div:
-                p_tag = caption_div.find('p')
-                if p_tag:
-                    description = p_tag.get_text(strip=True)
-
-            # Add valid results
-            if url and title:
-                results.append({
-                    "url": url,
-                    "title": title,
-                    "description": description or ""
-                })
-
-        return results
-
-    def _extract_duckduckgo_results(self, html_content: str, max_results: int = 10) -> List[Dict[str, str]]:
-        """Extract search results from DuckDuckGo HTML content"""
-        soup = BeautifulSoup(html_content, 'html.parser')
-        results = []
-
-        # Find all result containers
-        result_elements = soup.find_all('article', {'data-testid': 'result'})
-
-        for result_element in result_elements:
-            if len(results) >= max_results:
-                break
-                
-            # URL
-            url_element = result_element.find('a', {'data-testid': 'result-extras-url-link'})
-            url = url_element['href'] if url_element else None
-
-            # Title
-            title_element = result_element.find('a', {'data-testid': 'result-title-a'})
-            title = title_element.get_text(strip=True) if title_element else None
-
-            # Description (Snippet)
-            description_element = result_element.find('div', {'data-result': 'snippet'})
-            if description_element:
-                # Remove date spans if present
-                date_span = description_element.find('span', class_=re.compile(r'MILR5XIV'))
-                if date_span:
-                    date_span.decompose()
-                description = description_element.get_text(strip=True)
-            else:
-                description = None
-
-            if url and title:
-                results.append({
-                    "url": url,
-                    "title": title,
-                    "description": description or ""
-                })
-
-        return results
-
-
-# Tool function to be registered with the Tools class
-async def web_search_playwright(
-    search_term: str, 
-    num_results: int = 10,
-    explanation: str = ""
-) -> str:
-    """
-    Search the web using Playwright browser automation.
-    
-    Args:
-        search_term (str): The search query
-        num_results (int): Maximum number of results to return
-        explanation (str): Explanation for why this search is being performed
-        
-    Returns:
-        str: Formatted search results
-    """
-    search_agent = PlaywrightSearch(search_provider="bing")
-    
-    try:
-        results = await search_agent.search(search_term, num_results)
-        
-        if not results:
-            return f"No results found for: {search_term}"
-        
-        # Format results
-        formatted_results = f"Search results for: {search_term}\n\n"
-        
-        for i, result in enumerate(results, 1):
-            formatted_results += f"{i}. {result['title']}\n"
-            formatted_results += f"   URL: {result['url']}\n"
-            if result.get('description'):
-                formatted_results += f"   Description: {result['description']}\n"
-            formatted_results += "\n"
-            
-        return formatted_results
-    
-    except Exception as e:
-        return f"Error performing web search: {str(e)}"
-
-
-# Function to register this tool with the Tools class
-def register_playwright_search_tool(tools_instance):
-    """Register the Playwright search tool with the Tools instance"""
-    tools_instance.register_function(
-        web_search_playwright,
-        {
-            'type': 'function',
-            'function': {
-                'name': 'web_search_playwright',
-                'description': 'Search the web for information using Playwright browser automation',
-                'parameters': {
-                    'type': 'object',
-                    'properties': {
-                        'search_term': {
-                            'type': 'string',
-                            'description': 'The search query to look up on the web'
-                        },
-                        'num_results': {
-                            'type': 'integer',
-                            'description': 'Maximum number of results to return'
-                        },
-                        'explanation': {
-                            'type': 'string',
-                            'description': 'Explanation for why this search is being performed'
-                        }
-                    },
-                    'required': ['search_term']
-                }
-            }
-        }
-    )
-
-class ExtenedDomService(DomService):
-    def __init__(self, page):
-        super().__init__(page)
-        self.clickable_elements = []
-        self.page = page
     
     async def get_clickable_elements(self):
-        dom_state = await super().get_clickable_elements()
-        return dom_state
-    
-    async def get_clickable_elements_with_text(self):
-        dom_state = await self.get_clickable_elements()
-        for element in dom_state.selector_map.values():
-            if element.text:
-                self.clickable_elements.append(element)
-        return self.clickable_elements
-    
-    async def get_clickable_elements_with_text_and_url(self):
-        dom_state = await self.get_clickable_elements()
-        for element in dom_state.selector_map.values():
-            if element.text and element.url:
-                self.clickable_elements.append(element)
-        return self.clickable_elements
+        dom_service = DomService(self.page)
+        return await dom_service.get_clickable_elements()
     
     async def get_search_keyword_index(self):
         dom_state = await self.get_clickable_elements()
-        rich.print(dom_state.selector_map)
         #aria-label="Search"
         for element_key,element in dom_state.selector_map.items():
             if element.attributes.get("aria-label") == "Search":
@@ -517,6 +298,230 @@ class ExtenedDomService(DomService):
                 print(f"Element with key {element_key} not found in selector map")
         return False
 
+    
+    async def keyboard_press(self, key):
+        await self.page.keyboard.press(key)
+        await self.page.wait_for_load_state("networkidle", timeout=10000)
+
+    async def keyboard_insert_text(self, text):
+        await self.page.keyboard.insert_text(text)
+    
+    async def keyboard_press_enter(self):
+        await self.page.keyboard.press("Enter")
+        await self.page.wait_for_load_state("networkidle", timeout=10000)
+
+    async def click_search_k_by_domelement_approach(self):
+        dom_service = DomService(self.page)
+        search_keyword_index = await dom_service.get_search_keyword_index()
+        success = await dom_service.click_element(search_keyword_index)
+        return success
+    
+    async def click_search_k_by_direct_keyboard_approach(self):
+        await self.keyboard_press('Control+k')
+
+    async def close(self):
+        """Close browser and clean up resources"""
+        if self.context:
+            await self.context.close()
+        if self.browser:
+            await self.browser.close()
+        if self.playwright:
+            await self.playwright.stop()
+
+
+class PlaywrightSearch:
+    """Web search implementation using Playwright"""
+
+    def __init__(self, search_provider: str = 'bing'):
+        """Initialize the search agent"""
+        self.browser = PlaywrightBrowser(headless=False)
+        self.search_provider = search_provider
+
+    async def search(self, query: str, num_results: int = 10) -> List[Dict[str, str]]:
+        """Perform a web search and return results"""
+        try:
+            # Navigate to search engine
+            search_url = f'https://www.{self.search_provider}.com/search?q={query}'
+            await self.browser.navigate_to(search_url)
+            
+            # Get the HTML content
+            html = await self.browser.get_page_html()
+            
+            # Extract search results
+            if self.search_provider == 'bing':
+                search_results = self._extract_bing_results(html, num_results)
+            elif self.search_provider == 'duckduckgo':
+                search_results = self._extract_duckduckgo_results(html, num_results)
+            else:
+                search_results = []
+                
+            return search_results
+        except Exception as e:
+            print(f"Search error: {str(e)}")
+            return []
+        finally:
+            await self.browser.close()
+
+    def _extract_bing_results(self, html: str, max_results: int = 10) -> List[Dict[str, str]]:
+        """Extract search results from Bing HTML content"""
+        soup = BeautifulSoup(html, 'html.parser')
+        results = []
+
+        # Process Bing search results
+        result_elements = soup.find_all('li', class_='b_algo')
+
+        for result_element in result_elements:
+            if len(results) >= max_results:
+                break
+
+            title = None
+            url = None
+            description = None
+
+            # Find title and URL
+            title_header = result_element.find('h2')
+            if title_header:
+                title_link = title_header.find('a')
+                if title_link and title_link.get('href'):
+                    url = title_link['href']
+                    title = title_link.get_text(strip=True)
+
+            # Find description
+            caption_div = result_element.find('div', class_='b_caption')
+            if caption_div:
+                p_tag = caption_div.find('p')
+                if p_tag:
+                    description = p_tag.get_text(strip=True)
+
+            # Add valid results
+            if url and title:
+                results.append({
+                    "url": url,
+                    "title": title,
+                    "description": description or ""
+                })
+
+        return results
+
+    def _extract_duckduckgo_results(self, html_content: str, max_results: int = 10) -> List[Dict[str, str]]:
+        """Extract search results from DuckDuckGo HTML content"""
+        soup = BeautifulSoup(html_content, 'html.parser')
+        results = []
+
+        # Find all result containers
+        result_elements = soup.find_all('article', {'data-testid': 'result'})
+
+        for result_element in result_elements:
+            if len(results) >= max_results:
+                break
+                
+            # URL
+            url_element = result_element.find('a', {'data-testid': 'result-extras-url-link'})
+            url = url_element['href'] if url_element else None
+
+            # Title
+            title_element = result_element.find('a', {'data-testid': 'result-title-a'})
+            title = title_element.get_text(strip=True) if title_element else None
+
+            # Description (Snippet)
+            description_element = result_element.find('div', {'data-result': 'snippet'})
+            if description_element:
+                # Remove date spans if present
+                date_span = description_element.find('span', class_=re.compile(r'MILR5XIV'))
+                if date_span:
+                    date_span.decompose()
+                description = description_element.get_text(strip=True)
+            else:
+                description = None
+
+            if url and title:
+                results.append({
+                    "url": url,
+                    "title": title,
+                    "description": description or ""
+                })
+
+        return results
+
+
+# Tool function to be registered with the Tools class
+async def web_search_playwright(
+    search_term: str, 
+    num_results: int = 10,
+    explanation: str = ""
+) -> str:
+    """
+    Search the web using Playwright browser automation.
+    
+    Args:
+        search_term (str): The search query
+        num_results (int): Maximum number of results to return
+        explanation (str): Explanation for why this search is being performed
+        
+    Returns:
+        str: Formatted search results
+    """
+    search_agent = PlaywrightSearch(search_provider="bing")
+    
+    try:
+        results = await search_agent.search(search_term, num_results)
+        
+        if not results:
+            return f"No results found for: {search_term}"
+        
+        # Format results
+        formatted_results = f"Search results for: {search_term}\n\n"
+        
+        for i, result in enumerate(results, 1):
+            formatted_results += f"{i}. {result['title']}\n"
+            formatted_results += f"   URL: {result['url']}\n"
+            if result.get('description'):
+                formatted_results += f"   Description: {result['description']}\n"
+            formatted_results += "\n"
+            
+        return formatted_results
+    
+    except Exception as e:
+        return f"Error performing web search: {str(e)}"
+
+
+# Function to register this tool with the Tools class
+def register_playwright_search_tool(tools_instance):
+    """Register the Playwright search tool with the Tools instance"""
+    tools_instance.register_function(
+        web_search_playwright,
+        {
+            'type': 'function',
+            'function': {
+                'name': 'web_search_playwright',
+                'description': 'Search the web for information using Playwright browser automation',
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'search_term': {
+                            'type': 'string',
+                            'description': 'The search query to look up on the web'
+                        },
+                        'num_results': {
+                            'type': 'integer',
+                            'description': 'Maximum number of results to return'
+                        },
+                        'explanation': {
+                            'type': 'string',
+                            'description': 'Explanation for why this search is being performed'
+                        }
+                    },
+                    'required': ['search_term']
+                }
+            }
+        }
+    )
+
+  
+    
+
+        
+
 async def test():
     urls =[
         "https://microsoft.github.io/autogen/stable//index.html",
@@ -536,60 +541,54 @@ async def test():
             print(f"Navigating to {url}")
             await browser.navigate_to(url)
             
+            
             # Wait to ensure page is loaded
             await asyncio.sleep(2)
             
-            dom_service = ExtenedDomService(browser.page)
-            search_keyword_index = await dom_service.get_search_keyword_index()
             
-            if search_keyword_index is not None:
-                print(f"Found search element with index: {search_keyword_index}")
-                rich.print(search_keyword_index)
-                
-                # Click the search element
-                success = await dom_service.click_element(search_keyword_index)
-                await asyncio.sleep(2)  # Give time for search input to appear
+            
+            await browser.keyboard_press('Control+k')
+            await browser.keyboard_insert_text("function examples")
+            await browser.keyboard_press_enter()
+            await asyncio.sleep(3)  # Give time for search input to appear
                 
                 # Test filling the search input
-                if success:
-                    # Find the search input element that appears after clicking
-                    search_input_index = await dom_service.get_search_input_element()
-                    if search_input_index is not None:
-                        print(f"Found search input element with index: {search_input_index}")
+                # if success:
+                #     # Find the search input element that appears after clicking
+                #     search_input_index = await dom_service.get_search_input_element()
+                #     if search_input_index is not None:
+                #         print(f"Found search input element with index: {search_input_index}")
                         
-                        search_text = "function examples"
-                        print(f"Filling search input with: '{search_text}'")
-                        fill_success = await dom_service.fill_element(search_input_index, search_text)
-                        if fill_success:
-                            print("Successfully filled search input")
-                            await asyncio.sleep(1)  # Short pause before pressing Enter
+                #         search_text = "function examples"
+                #         print(f"Filling search input with: '{search_text}'")
+                #         fill_success = await dom_service.fill_element(search_input_index, search_text)
+                #         if fill_success:
+                #             print("Successfully filled search input")
+                #             await asyncio.sleep(1)  # Short pause before pressing Enter
                             
-                            # Press Enter to submit the search
-                            print("Pressing Enter to submit search")
-                            enter_success = await dom_service.press_enter(search_input_index)
-                            if enter_success:
-                                print("Successfully submitted search query")
-                                await asyncio.sleep(3)  # Give time to see search results
-                            else:
-                                print("Failed to press Enter")
-                        else:
-                            print("Failed to fill search input")
-                    else:
-                        print("Search input element not found after clicking search button")
-                        # Try a direct approach as fallback
-                        try:
-                            await browser.page.fill("input[type='search']", "function examples")
-                            print("Filled search input using direct selector")
-                            await asyncio.sleep(1)
-                            await browser.page.keyboard.press("Enter")
-                            print("Pressed Enter using direct keyboard method")
-                            await asyncio.sleep(3)
-                        except Exception as e:
-                            print(f"Direct approach also failed: {str(e)}")
+                #             # Press Enter to submit the search
+                #             print("Pressing Enter to submit search")
+                #             enter_success = await dom_service.press_enter(search_input_index)
+                #             if enter_success:
+                #                 print("Successfully submitted search query")
+                #                 await asyncio.sleep(3)  # Give time to see search results
+                #             else:
+                #                 print("Failed to press Enter")
+                #         else:
+                #             print("Failed to fill search input")
+                #     else:
+                #         print("Search input element not found after clicking search button")
+                #         # Try a direct approach as fallback
+                #         try:
+                #             await browser.page.fill("input[type='search']", "function examples")
+                #             print("Filled search input using direct selector")
+                #             await asyncio.sleep(1)
+                #             await browser.page.keyboard.press("Enter")
+                #             print("Pressed Enter using direct keyboard method")
+                #             await asyncio.sleep(3)
+                #         except Exception as e:
+                #             print(f"Direct approach also failed: {str(e)}")
                 
-                break  # Exit the loop if we found a search element
-            else:
-                print("Search element not found, trying next URL")
         except Exception as e:
             print(f"Error with URL {url}: {str(e)}")
             continue
