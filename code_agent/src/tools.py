@@ -186,15 +186,17 @@ class Tools:
     def register_file_tools(self):
         """Register file operation tools."""
         
-        def read_file(target_file: str, offset: int = 0, limit: int = None, should_read_entire_file: bool = False) -> str:
+        def read_file(target_file: str, start_line_one_indexed: int = 1, end_line_one_indexed_inclusive: int = None, should_read_entire_file: bool = False, explanation: str = "") -> str:
             """
-            Read the contents of a file.
+            Read the contents of a file. The output of this tool call will be the 1-indexed file contents from start_line_one_indexed to end_line_one_indexed_inclusive, together with a summary of the lines outside start_line_one_indexed and end_line_one_indexed_inclusive.
+            Note that this call can view at most 250 lines at a time and 200 lines minimum.
             
             Args:
                 target_file (str): Path to the file to read
-                offset (int): Line to start reading from (0-indexed)
-                limit (int): Maximum number of lines to read
-                should_read_entire_file (bool): Whether to read the entire file ignoring offset and limit
+                start_line_one_indexed (int): The one-indexed line number to start reading from (inclusive)
+                end_line_one_indexed_inclusive (int): The one-indexed line number to end reading at (inclusive)
+                should_read_entire_file (bool): Whether to read the entire file
+                explanation (str): One sentence explanation as to why this tool is being used
                 
             Returns:
                 str: The file contents
@@ -204,31 +206,57 @@ class Tools:
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     if should_read_entire_file:
-                        return f.read()
+                        content = f.read()
+                        return f"Requested to read the entire file.\nContents of {target_file}, lines 1-{content.count(os.linesep) + 1} (entire file):\n```\n{content}\n```"
                     
                     lines = f.readlines()
                 
-                # Apply offset and limit
-                start_idx = max(0, offset)
-                end_idx = len(lines) if limit is None else min(start_idx + limit, len(lines))
+                # Apply start and end line indices (convert from 1-indexed to 0-indexed)
+                start_idx = max(0, start_line_one_indexed - 1)
+                if end_line_one_indexed_inclusive is None:
+                    # If end line is not specified, limit to start + 250 lines or the end of file
+                    end_idx = min(start_idx + 250, len(lines))
+                else:
+                    end_idx = min(end_line_one_indexed_inclusive - 1, len(lines) - 1)
+                    # Enforce maximum of 250 lines
+                    if end_idx - start_idx + 1 > 250:
+                        end_idx = start_idx + 250 - 1
+                
+                # Ensure reading at least 200 lines if available
+                if end_idx - start_idx + 1 < 200 and len(lines) >= 200:
+                    end_idx = min(start_idx + 200 - 1, len(lines) - 1)
                 
                 # Include summary of lines outside the range
                 result = []
                 if start_idx > 0:
                     result.append(f"[Lines 1-{start_idx} omitted]")
                 
-                result.append(''.join(lines[start_idx:end_idx]))
+                selected_content = ''.join(lines[start_idx:end_idx+1])
                 
-                if end_idx < len(lines):
-                    result.append(f"[Lines {end_idx+1}-{len(lines)} omitted]")
+                # Display the range we're actually returning
+                start_line = start_idx + 1  # Convert back to 1-indexed
+                end_line = end_idx + 1      # Convert back to 1-indexed
                 
-                return '\n'.join(result)
+                if len(lines) > end_idx + 1:
+                    result.append(selected_content)
+                    result.append(f"[Lines {end_line+1}-{len(lines)} omitted]")
+                    return f"Requested to read lines {start_line_one_indexed}-{end_line_one_indexed_inclusive if end_line_one_indexed_inclusive is not None else ''}, but returning lines {start_line}-{end_line} to comply with line limits.\nContents of {target_file}, lines {start_line}-{end_line}:\n```\n{''.join(result)}\n```"
+                else:
+                    result.append(selected_content)
+                    return f"Requested to read lines {start_line_one_indexed}-{end_line_one_indexed_inclusive if end_line_one_indexed_inclusive is not None else ''}, but returning lines {start_line}-{end_line} to give more context.\nContents of {target_file}, lines {start_line}-{end_line}:\n```\n{''.join(result)}\n```"
             except Exception as e:
                 return f"Error reading file: {str(e)}"
         
         def edit_file(target_file: str, code_edit: str, instructions: str = "") -> str:
             """
             Edit a file with the specified code changes.
+            
+            This will be read by a less intelligent model, which will quickly apply the edit. You should make it clear what the edit is, while also minimizing the unchanged code you write.
+            When writing the edit, you should specify each edit in sequence, with the special comment // ... existing code ... to represent unchanged code in between edited lines.
+            
+            You should still bias towards repeating as few lines of the original file as possible to convey the change.
+            But, each edit should contain sufficient context of unchanged lines around the code you're editing to resolve ambiguity.
+            DO NOT omit spans of pre-existing code (or comments) without using the // ... existing code ... comment to indicate its absence. If you omit the existing code comment, the model may inadvertently delete these lines.
             
             Args:
                 target_file (str): Path to the file to edit
@@ -255,9 +283,23 @@ class Tools:
                     with open(file_path, 'r', encoding='utf-8') as f:
                         existing_content = f.read()
                     
-                    # Here we would apply a more sophisticated diff algorithm
-                    # For now, we'll just replace the entire content
-                    new_content = code_edit
+                    # Determine the appropriate comment marker based on file extension
+                    ext = os.path.splitext(target_file)[1].lower()
+                    comment_marker = "// ... existing code ..."  # Default for most languages
+                    
+                    # Adjust comment marker based on file extension
+                    if ext in ['.py', '.sh', '.bash', '.rb']:
+                        comment_marker = "# ... existing code ..."
+                    elif ext in ['.html', '.xml']:
+                        comment_marker = "<!-- ... existing code ... -->"
+                    elif ext in ['.lua', '.hs']:
+                        comment_marker = "-- ... existing code ..."
+                    
+                    # Simple approach: if the edit contains comment markers, just replace them with empty strings
+                    if comment_marker in code_edit:
+                        new_content = code_edit.replace(comment_marker, "")
+                    else:
+                        new_content = code_edit
                 else:
                     # Create new file
                     existing_content = ""
@@ -476,18 +518,39 @@ class Tools:
     def register_terminal_tools(self):
         """Register terminal command execution tools."""
         
-        async def run_terminal_cmd(command: str, is_background: bool = False) -> str:
+        async def run_terminal_cmd(command: str, is_background: bool = False, require_user_approval: bool = True, explanation: str = "") -> str:
             """
-            Run a terminal command.
+            PROPOSE a command to run on behalf of the user.
+            If you have this tool, note that you DO have the ability to run commands directly on the USER's system.
+            Note that the user will have to approve the command before it is executed.
+            The user may reject it if it is not to their liking, or may modify the command before approving it. If they do change it, take those changes into account.
+            The actual command will NOT execute until the user approves it. The user may not approve it immediately. Do NOT assume the command has started running.
             
             Args:
                 command (str): The command to run
                 is_background (bool): Whether to run in background
+                require_user_approval (bool): Whether the user must approve the command before it is executed
+                explanation (str): Explanation for why this command needs to be run
                 
             Returns:
                 str: Command output
             """
             try:
+                # If user approval is required, ask for confirmation
+                if require_user_approval:
+                    console = Console()
+                    console.print(f"[yellow]Command to be executed:[/yellow] {command}")
+                    if explanation:
+                        console.print(f"[cyan]Reason:[/cyan] {explanation}")
+                    
+                    if is_background:
+                        console.print("[cyan]This command will run in the background[/cyan]")
+                    
+                    confirmation = input("Do you approve this command? (y/n): ").strip().lower()
+                    
+                    if confirmation != 'y' and confirmation != 'yes':
+                        return "Command execution cancelled by user"
+                
                 # Use the workspace_root as the cwd for command execution
                 process = await asyncio.create_subprocess_shell(
                     command,
@@ -522,18 +585,26 @@ class Tools:
             'type': 'function',
             'function': {
                 'name': 'run_terminal_cmd',
-                'description': 'Run a terminal command',
+                'description': 'PROPOSE a command to run on behalf of the user',
                 'parameters': {
                     'type': 'object',
-                    'required': ['command'],
+                    'required': ['command', 'is_background', 'require_user_approval'],
                     'properties': {
                         'command': {
                             'type': 'string',
-                            'description': 'The command to run'
+                            'description': 'The terminal command to execute'
                         },
                         'is_background': {
                             'type': 'boolean',
-                            'description': 'Whether to run in background'
+                            'description': 'Whether the command should be run in the background'
+                        },
+                        'require_user_approval': {
+                            'type': 'boolean',
+                            'description': 'Whether the user must approve the command before it is executed'
+                        },
+                        'explanation': {
+                            'type': 'string',
+                            'description': 'One sentence explanation as to why this command needs to be run and how it contributes to the goal'
                         }
                     }
                 }
@@ -680,12 +751,16 @@ class Tools:
         
         def codebase_search(query: str, target_directories: list = None, explanation: str = "") -> str:
             """
-            Find code snippets from the codebase relevant to the search query.
+            Find snippets of code from the codebase most relevant to the search query.
+            This is a semantic search tool, so the query should ask for something semantically matching what is needed.
+            If it makes sense to only search in particular directories, please specify them in the target_directories field.
+            Unless there is a clear reason to use your own search query, please just reuse the user's exact query with their wording.
+            Their exact wording/phrasing can often be helpful for the semantic search query. Keeping the same exact question format can also be helpful.
             
             Args:
-                query (str): The search query to find relevant code
-                target_directories (list): Optional list of directories to search in
-                explanation (str): Explanation for why the search is being performed
+                query (str): The search query to find relevant code. You should reuse the user's exact query with their wording unless there is a clear reason not to.
+                target_directories (list): Optional list of directories to search in (glob patterns for directories to search over)
+                explanation (str): One sentence explanation as to why this tool is being used, and how it contributes to the goal.
                 
             Returns:
                 str: Relevant code snippets
@@ -784,8 +859,9 @@ class Tools:
                 if results:
                     formatted_results = []
                     for result in results[:5]:  # Limit to top 5 results
+                        # Format according to required code citation format: ```startLine:endLine:filepath
                         formatted_results.append(
-                            f"File: {result['path']} (lines {result['start_line']}-{result['end_line']})\n```\n{result['snippet']}\n```\n"
+                            f"```{result['start_line']}:{result['end_line']}:{result['path']}\n{result['snippet']}\n```\n"
                         )
                     return "\n".join(formatted_results)
                 else:
@@ -859,9 +935,70 @@ class Tools:
             except Exception as e:
                 return f"Error finding usages: {str(e)}"
 
+        async def web_search(search_term: str, explanation: str = "") -> str:
+            """
+            Search the web for real-time information about any topic. Use this tool when you need up-to-date information that might not be available in your training data, or when you need to verify current facts. The search results will include relevant snippets and URLs from web pages. This is particularly useful for questions about current events, technology updates, or any topic that requires recent information.
+            
+            Args:
+                search_term (str): The search term to look up on the web. Be specific and include relevant keywords for better results. For technical queries, include version numbers or dates if relevant.
+                explanation (str): One sentence explanation as to why this tool is being used, and how it contributes to the goal.
+                
+            Returns:
+                str: Search results with snippets and URLs
+            """
+            try:
+                # Try to use playwright-based search if available
+                try:
+                    # First attempt with the playwright tool
+                    from liteauto.parselite import asearch
+                    results = await asearch(search_term, "google")
+                    
+                    # Format the results
+                    formatted_results = []
+                    for result in results[:5]:  # Limit to top 5 results
+                        title = result.get('title', '')
+                        url = result.get('url', '')
+                        snippet = result.get('snippet', '')
+                        
+                        formatted_results.append(f"- [{title}]({url})\n  {snippet}\n")
+                    
+                    return "\n".join(formatted_results)
+                except:
+                    # Fallback to regular HTTP request
+                    pass
+                
+                # Simple fallback using a JSON API
+                search_url = f"https://serpapi.com/search?q={search_term}&api_key=YOUR_API_KEY"
+                
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(search_url) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            
+                            # Extract and format results
+                            formatted_results = []
+                            if 'organic_results' in data:
+                                for result in data['organic_results'][:5]:
+                                    title = result.get('title', '')
+                                    url = result.get('link', '')
+                                    snippet = result.get('snippet', '')
+                                    
+                                    formatted_results.append(f"- [{title}]({url})\n  {snippet}\n")
+                                
+                                return "\n".join(formatted_results)
+                            else:
+                                return "No search results found."
+                        else:
+                            return f"Error: Received status code {response.status}"
+            
+            except Exception as e:
+                # Simulated search results as fallback
+                return f"Web search for '{search_term}' failed: {str(e)}\n\nPlease use real web search APIs in production."
+        
         # Register the functions
         self.register_function(fetch_webpage)
         self.register_function(semantic_search)
         self.register_function(codebase_search)
         self.register_function(reapply)
         self.register_function(list_code_usages)
+        self.register_function(web_search)

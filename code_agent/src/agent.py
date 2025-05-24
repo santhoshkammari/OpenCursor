@@ -136,6 +136,9 @@ class CodeAgent:
                     elif name == 'run_terminal_cmd':
                         cmd = args.get('command', '')
                         print(f"Running command: {cmd}")
+                    elif name == 'web_search':
+                        search_term = args.get('search_term', '')
+                        print(f"Searching web for: {search_term}")
                     else:
                         print(f"Using {name}...")
                     

@@ -169,7 +169,6 @@ class PlaywrightSearch:
 # Tool function to be registered with the Tools class
 async def web_search_playwright(
     search_term: str, 
-    num_results: int = 10,
     explanation: str = ""
 ) -> str:
     """
@@ -187,7 +186,7 @@ async def web_search_playwright(
     search_agent = PlaywrightSearch(search_provider="bing")
     
     try:
-        results = await search_agent.search(search_term, num_results)
+        results = await search_agent.search(search_term, num_results=10)
         
         if not results:
             return f"No results found for: {search_term}"
