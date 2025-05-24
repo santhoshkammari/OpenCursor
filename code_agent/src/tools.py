@@ -11,6 +11,7 @@ from rich.console import Console
 from .llm import LLMClient
 from .tool_playwright import register_playwright_search_tool
 from .tool_browser import register_browser_search_tools
+from liteauto.parselite import parse
 
 
 class Tools:
@@ -568,6 +569,34 @@ class Tools:
     def register_semantic_tools(self):
         """Register semantic search tools for code understanding."""
         
+        async def fetch_webpage(urls: list, explanation: str = "") -> str:
+            """
+            Fetch contents from web pages.
+            
+            Args:
+                urls (list): List of URLs to fetch content from , For single url have single element list
+                explanation (str): Explanation for why the content is being fetched
+                
+            Returns:
+                str: Formatted web page content
+            """
+            try:
+                from liteauto.parselite import aparse
+                results = await aparse(urls)
+                
+                # Format the results
+                formatted_output = []
+                if isinstance(results, list):
+                    for result in results:
+                        formatted_output.append(f"URL: {result.url}\n\nContent:\n{result.content[:2000]}...")
+                        formatted_output.append("-" * 50)
+                else:
+                    formatted_output.append(f"URL: {results.url}\n\nContent:\n{results.content[:2000]}...")
+                
+                return "\n".join(formatted_output)
+            except Exception as e:
+                return f"Error fetching web page content: {str(e)}"
+        
         def semantic_search(query: str) -> str:
             """
             Run a semantic search on the codebase.
@@ -831,6 +860,7 @@ class Tools:
                 return f"Error finding usages: {str(e)}"
 
         # Register the functions
+        self.register_function(fetch_webpage)
         self.register_function(semantic_search)
         self.register_function(codebase_search)
         self.register_function(reapply)

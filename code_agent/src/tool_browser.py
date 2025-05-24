@@ -174,7 +174,7 @@ class PlaywrightBrowser:
         """
         try:
             # Navigate to URL if provided
-            if url:
+            if url!=self.page.url:
                 await self.navigate_to(url)
             
             # Press Ctrl+K to open search
@@ -231,9 +231,8 @@ class PlaywrightBrowser:
         """
         try:
             # Navigate to URL if provided
-            if url:
+            if url!=self.page.url:
                 await self.navigate_to(url)
-                await asyncio.sleep(2)  # Wait for page to load
             
             # Get search element index
             search_keyword_index = await self.get_search_keyword_index()

@@ -80,7 +80,7 @@ You MUST NOT ask the user for clarification or additional input during execution
 4. Web tools:
    - web_search_playwright(search_term, search_provider) - Search the web using Playwright (preferred)
    - web_search(search_term) - Search the web (fallback if Playwright search fails)
-   - fetch_webpage(urls, query) - Fetch contents from web pages
+   - fetch_webpage(urls, explanation) - Fetch contents from web pages
 </available_tools>
 
 When you've completed the task or cannot make further progress, provide a final summary. Don't include tool calls in your final response.
@@ -121,6 +121,6 @@ You are an interactive AI coding agent that works step-by-step with the user. Yo
 4. Web tools:
    - web_search_playwright(search_term, search_provider) - Search the web using Playwright (preferred)
    - web_search(search_term) - Search the web (fallback if Playwright search fails)
-   - fetch_webpage(urls, query) - Fetch contents from web pages
+   - fetch_webpage(urls, explanation) - Fetch contents from web pages
 </available_tools>
 """
