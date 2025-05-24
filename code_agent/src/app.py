@@ -375,9 +375,8 @@ class OpenCursorApp:
         
     def _format_fetch_webpage_results(self, result: str) -> str:
         """Format fetch webpage results into a nested table"""
-        # Create a nested table for web results
-        web_table = Table(expand=True)
-        web_table.add_column("Result", style="white")
+        # Create markdown content for results
+        markdown_content = ""
         
         # Split the result by URL entries
         url_entries = result.split("URL: ")[1:]
@@ -398,10 +397,10 @@ class OpenCursorApp:
                 content_preview = " ".join(content_preview.split())
                 
                 # Format as citation style: "content_preview (domain)"
-                citation = f"{content_preview} ({domain})"
-                web_table.add_row(citation)
+                citation = f"- [{domain}]({url}) {content_preview}\n"
+                markdown_content += citation
         
-        return web_table
+        return Markdown(markdown_content.strip())
         
     def _format_web_search_results(self, result: str) -> str:
         """Format web search results into a nested table"""
