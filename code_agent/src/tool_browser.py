@@ -279,6 +279,89 @@ class ExtenedDomService(DomService):
                 return element_key
         return None
     
+    async def get_search_input_element(self):
+        """Find the search input element after the search button has been clicked"""
+        dom_state = await self.get_clickable_elements()
+        print("Looking for search input element among these elements:")
+        rich.print(dom_state.selector_map)
+        
+        # Look for input elements with search-related attributes
+        for element_key, element in dom_state.selector_map.items():
+            # Check if it's an input element or has input in the tag name
+            if (hasattr(element, 'tag_name') and 
+                (element.tag_name == "input" or 'input' in str(element.tag_name).lower())):
+                print(f"Found potential input element: {element}")
+                # Check for common search input attributes
+                if (element.attributes.get("type") == "search" or 
+                    "search" in element.attributes.get("class", "").lower() or 
+                    "search" in element.attributes.get("id", "").lower() or 
+                    "search" in element.attributes.get("name", "").lower() or
+                    "search" in element.attributes.get("placeholder", "").lower()):
+                    return element_key
+            
+            # Also check if any attribute contains 'search'
+            if hasattr(element, 'attributes'):
+                for attr_name, attr_value in element.attributes.items():
+                    if isinstance(attr_value, str) and 'search' in attr_value.lower():
+                        print(f"Found element with search in attributes: {element}")
+                        return element_key
+        
+        # If we couldn't find a search input, try to find any input element
+        for element_key, element in dom_state.selector_map.items():
+            if hasattr(element, 'tag_name') and element.tag_name == "input":
+                print(f"Falling back to first input element: {element}")
+                return element_key
+                
+        return None
+    
+    async def fill_element(self, element_key, text):
+        """Fill a form element with text by its key in the selector map"""
+        if element_key is not None:
+            dom_state = await self.get_clickable_elements()
+            if element_key in dom_state.selector_map:
+                element = dom_state.selector_map[element_key]
+                print(f"Element details for filling: {element}")
+                
+                try:
+                    # Try filling by aria-label attribute
+                    if hasattr(element, 'attributes') and element.attributes.get('aria-label'):
+                        aria_label = element.attributes.get('aria-label')
+                        selector = f"input[aria-label='{aria_label}']"
+                        await self.page.fill(selector, text)
+                        print(f"Filled element with aria-label selector: {selector}")
+                        return True
+                    # Try filling by xpath
+                    elif hasattr(element, 'xpath') and element.xpath:
+                        # Make sure xpath starts with // for relative path
+                        xpath = element.xpath
+                        if not xpath.startswith('//'):
+                            xpath = '//' + xpath.lstrip('/')
+                        await self.page.fill(xpath, text)
+                        print(f"Filled element with XPath: {xpath}")
+                        return True
+                    # Try by id if available
+                    elif hasattr(element, 'attributes') and element.attributes.get('id'):
+                        id_value = element.attributes.get('id')
+                        selector = f"#{id_value}"
+                        await self.page.fill(selector, text)
+                        print(f"Filled element with ID selector: {selector}")
+                        return True
+                    else:
+                        print(f"Could not find a way to fill element with key {element_key}")
+                except Exception as e:
+                    print(f"Error filling element: {str(e)}")
+                    
+                    # Fallback to direct fill by tag and aria-label
+                    try:
+                        await self.page.fill("input[aria-label='Search']", text)
+                        print("Filled search input using direct selector")
+                        return True
+                    except Exception as e2:
+                        print(f"Fallback fill also failed: {str(e2)}")
+            else:
+                print(f"Element with key {element_key} not found in selector map")
+        return False
+    
     async def click_element(self, element_key):
         """Click on an element by its key in the selector map"""
         if element_key is not None:
@@ -351,7 +434,33 @@ async def test():
                 
                 # Click the search element
                 success = await dom_service.click_element(search_keyword_index)
-                await asyncio.sleep(2)  # Give time to see the results
+                await asyncio.sleep(2)  # Give time for search input to appear
+                
+                # Test filling the search input
+                if success:
+                    # Find the search input element that appears after clicking
+                    search_input_index = await dom_service.get_search_input_element()
+                    if search_input_index is not None:
+                        print(f"Found search input element with index: {search_input_index}")
+                        
+                        search_text = "function examples"
+                        print(f"Filling search input with: '{search_text}'")
+                        fill_success = await dom_service.fill_element(search_input_index, search_text)
+                        if fill_success:
+                            print("Successfully filled search input")
+                            await asyncio.sleep(2)  # Give time to see the filled input
+                        else:
+                            print("Failed to fill search input")
+                    else:
+                        print("Search input element not found after clicking search button")
+                        # Try a direct approach as fallback
+                        try:
+                            await browser.page.fill("input[type='search']", "function examples")
+                            print("Filled search input using direct selector")
+                            await asyncio.sleep(2)
+                        except Exception as e:
+                            print(f"Direct fill approach also failed: {str(e)}")
+                
                 break  # Exit the loop if we found a search element
             else:
                 print("Search element not found, trying next URL")
