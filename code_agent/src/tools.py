@@ -9,7 +9,7 @@ from difflib import unified_diff
 from rich.console import Console
 
 from .llm import LLMClient
-from .tool_playwright_search import register_playwright_search_tool
+from .tool_playwright import register_playwright_search_tool
 
 
 class Tools:

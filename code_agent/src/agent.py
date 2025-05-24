@@ -5,7 +5,7 @@ from typing import Dict, Any, List, Tuple, Optional
 from .llm import LLMClient
 from .tools import Tools
 from .prompts import SYSTEM_PROMPT, AUTONOMOUS_AGENT_PROMPT, INTERACTIVE_AGENT_PROMPT
-from .tool_playwright_search import register_playwright_search_tool
+from .tool_playwright import register_playwright_search_tool
 
 
 

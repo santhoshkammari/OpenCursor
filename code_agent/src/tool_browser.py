@@ -2,31 +2,36 @@ import asyncio
 import os
 import re
 from typing import Dict, List, Optional, Any
+from browser_use import BrowserSession, BrowserProfile,DomService
+from playwright.async_api import async_playwright
+
+
 from bs4 import BeautifulSoup
-from playwright.async_api import async_playwright, Page, Browser, BrowserContext
+import rich
 
 class PlaywrightBrowser:
     """A simplified browser interaction manager using Playwright"""
 
-    def __init__(self, headless=True):
-        self.playwright = None
+    def __init__(self, headless=False):
         self.browser = None
         self.context = None
-        self.page = None
         self.headless = headless
+        self.session = None
+        self.profile = None
+        self.page = None
+        self.playwright = None
 
     async def initialize(self):
         """Initialize the browser if not already done"""
-        if self.page is not None:
-            return
-
-        self.playwright = await async_playwright().start()
-        self.browser = await self.playwright.chromium.launch(headless=self.headless)
-        self.context = await self.browser.new_context(
-            viewport={"width": 1280, "height": 800},
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-        )
-        self.page = await self.context.new_page()
+        if self.browser is None:
+            self.playwright = await async_playwright().start()
+            # Launch browser directly rather than using BrowserSession
+            self.browser = await self.playwright.chromium.launch(
+                headless=self.headless,
+                args=['--no-sandbox']
+            )
+            self.context = await self.browser.new_context()
+            self.page = await self.context.new_page()
 
     async def navigate_to(self, url: str):
         """Navigate to a URL"""
@@ -39,7 +44,9 @@ class PlaywrightBrowser:
 
     async def get_page_html(self):
         """Get the HTML content of the current page"""
-        return await self.page.content()
+        if self.page:
+            return await self.page.content()
+        return ""
 
     async def close(self):
         """Close browser and clean up resources"""
@@ -177,7 +184,6 @@ async def web_search_playwright(
     
     Args:
         search_term (str): The search query
-        search_provider (str): The search engine to use (bing or duckduckgo)
         num_results (int): Maximum number of results to return
         explanation (str): Explanation for why this search is being performed
         
@@ -239,3 +245,90 @@ def register_playwright_search_tool(tools_instance):
             }
         }
     )
+
+class ExtenedDomService(DomService):
+    def __init__(self, page):
+        super().__init__(page)
+        self.clickable_elements = []
+        self.page = page
+    
+    async def get_clickable_elements(self):
+        dom_state = await super().get_clickable_elements()
+        return dom_state
+    
+    async def get_clickable_elements_with_text(self):
+        dom_state = await self.get_clickable_elements()
+        for element in dom_state.selector_map.values():
+            if element.text:
+                self.clickable_elements.append(element)
+        return self.clickable_elements
+    
+    async def get_clickable_elements_with_text_and_url(self):
+        dom_state = await self.get_clickable_elements()
+        for element in dom_state.selector_map.values():
+            if element.text and element.url:
+                self.clickable_elements.append(element)
+        return self.clickable_elements
+    
+    async def get_search_keyword_index(self):
+        dom_state = await self.get_clickable_elements()
+        rich.print(dom_state.selector_map)
+        #aria-label="Search"
+        for element_key,element in dom_state.selector_map.items():
+            if element.attributes.get("aria-label") == "Search":
+                return element_key
+        return None
+    
+    async def click_element(self, element_key):
+        """Click on an element by its key in the selector map"""
+        if element_key is not None:
+            dom_state = await self.get_clickable_elements()
+            if element_key in dom_state.selector_map:
+                element = dom_state.selector_map[element_key]
+                # Use the selector to click the element
+                if hasattr(element, 'selector') and element.selector:
+                    try:
+                        await self.page.click(element.selector)
+                        print(f"Clicked element with selector: {element.selector}")
+                        return True
+                    except Exception as e:
+                        print(f"Error clicking element: {str(e)}")
+                else:
+                    print(f"Element with key {element_key} has no selector")
+            else:
+                print(f"Element with key {element_key} not found in selector map")
+        return False
+
+async def test():
+    urls =[
+        "https://microsoft.github.io/autogen/stable//index.html",
+        "https://python.langchain.com/docs/introduction/",
+        "https://docs.cursor.com/welcome",
+        "https://docs.anthropic.com/en/api/overview",
+    ]
+    
+    # Test browser navigation
+    print("\n=== Testing browser navigation ===")
+    browser = PlaywrightBrowser(headless=False)
+    await browser.initialize()
+    for url in urls:
+        await browser.navigate_to(url)
+        dom_service = ExtenedDomService(browser.page)
+        search_keyword_index = await dom_service.get_search_keyword_index()
+        rich.print(search_keyword_index)
+        
+        # Click the search element if found
+        if search_keyword_index is not None:
+            print(f"Clicking search element with index: {search_keyword_index}")
+            await dom_service.click_element(search_keyword_index)
+            await asyncio.sleep(2)  # Give time to see the search box open
+        else:
+            print("Search element not found")
+            
+        break
+    await browser.close()
+    
+    print("\nTests completed successfully!")
+
+if __name__ == "__main__":
+    asyncio.run(test())
