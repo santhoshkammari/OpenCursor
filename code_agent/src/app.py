@@ -1,15 +1,6 @@
 #!/usr/bin/env python3
 import os
 import sys
-
-# Set environment variables to disable telemetry before anything else
-os.environ["TELEMETRY_ENABLED"] = "0"
-os.environ["SENTENCE_TRANSFORMERS_TELEMETRY"] = "0"
-os.environ["BROWSER_USE_TELEMETRY"] = "0"
-os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
-os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "1"
-os.environ["PYTHONWARNINGS"] = "ignore"
-
 import asyncio
 import argparse
 import time
@@ -18,55 +9,16 @@ import logging
 from typing import List, Dict, Optional, Set, Union
 from pathlib import Path
 
-# Create a special filter to silence telemetry messages
-class TelemetryFilter(logging.Filter):
-    def filter(self, record):
-        # Block any message containing "telemetry" or coming from the telemetry logger
-        if (hasattr(record, 'name') and ('telemetry' in record.name.lower())) or \
-           (hasattr(record, 'msg') and record.msg and isinstance(record.msg, str) and 'telemetry' in record.msg.lower()):
-            return False
-        return True
-
-# Add the filter to the root logger
-logging.getLogger().addFilter(TelemetryFilter())
-
-# Monkey patch the logging system to completely suppress telemetry logs
-original_getLogger = logging.getLogger
-
-def patched_getLogger(name=None):
-    logger = original_getLogger(name)
-    if name == "telemetry" or (name and "telemetry" in name.lower()):
-        logger.setLevel(logging.CRITICAL)
-        logger.propagate = False
-        logger.disabled = True
-        # Replace all handlers with a null handler
-        for handler in logger.handlers[:]:
-            logger.removeHandler(handler)
-        logger.addHandler(logging.NullHandler())
-    return logger
-
-logging.getLogger = patched_getLogger
-
-# Disable all logging before anything else
-logging.basicConfig(level=logging.ERROR)
-
-# Force silence the telemetry logger with a null handler
-telemetry_logger = logging.getLogger("telemetry")
-telemetry_logger.setLevel(logging.ERROR)
-telemetry_logger.propagate = False
-telemetry_logger.addHandler(logging.NullHandler())
+# Configure logging to suppress INFO messages
+logging.basicConfig(level=logging.WARNING)
 
 # Silence standard library loggers
 for logger_name in ["asyncio", "urllib", "urllib3", "filelock"]:
     logging.getLogger(logger_name).setLevel(logging.ERROR)
-    logging.getLogger(logger_name).propagate = False
-    logging.getLogger(logger_name).addHandler(logging.NullHandler())
 
 # Explicitly silence specific loggers that are producing unwanted output
 for logger_name in ["telemetry", "sentence_transformers.SentenceTransformer"]:
     logging.getLogger(logger_name).setLevel(logging.ERROR)
-    logging.getLogger(logger_name).propagate = False
-    logging.getLogger(logger_name).addHandler(logging.NullHandler())
 
 import rich
 from rich.console import Console
@@ -90,6 +42,9 @@ from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.shortcuts import CompleteStyle
 
 from code_agent.src.agent import CodeAgent
+
+import os
+os.environ["ANONYMIZED_TELEMETRY"] = "false"
 
 OPENCURSOR_LOGO_V1 = """
   ____  _____  ______ _   _  _____ _    _ _____   _____  ____  _____  

@@ -172,16 +172,8 @@ def test_edit_tool():
         "target_file": "test_edit.py",
         "code_edit": """# ... existing code ...
 def multiply(a, b):
-    '''Multiply two numbers and return the result.
-
-    Args:
-        a (int or float): The first number.
-        b (int or float): The second number.
-
-    Returns:
-        int or float: The product of a and b.
-    '''
-    return a * b""",
+    """Multiply two numbers and return the result."""
+    return a * b
         "instructions": "Add a print statement to the file"
     }
     print(agent.tools_manager.available_functions.keys())
