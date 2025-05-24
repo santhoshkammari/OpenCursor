@@ -167,7 +167,7 @@ class PlaywrightSearch:
 
 
 # Tool function to be registered with the Tools class
-async def web_search_playwright(
+async def web_search(
     search_term: str, 
     explanation: str = ""
 ) -> str:
@@ -176,8 +176,6 @@ async def web_search_playwright(
     
     Args:
         search_term (str): The search query
-        search_provider (str): The search engine to use (bing or duckduckgo)
-        num_results (int): Maximum number of results to return
         explanation (str): Explanation for why this search is being performed
         
     Returns:
@@ -211,26 +209,22 @@ async def web_search_playwright(
 def register_playwright_search_tool(tools_instance):
     """Register the Playwright search tool with the Tools instance"""
     tools_instance.register_function(
-        web_search_playwright,
+        web_search,
         {
             'type': 'function',
             'function': {
-                'name': 'web_search_playwright',
-                'description': 'Search the web for information using Playwright browser automation',
+                'name': 'web_search',
+                'description': 'Search the web for real-time information about any topic. Use this tool when you need up-to-date information that might not be available in your training data, or when you need to verify current facts. The search results will include relevant snippets and URLs from web pages. This is particularly useful for questions about current events, technology updates, or any topic that requires recent information.',
                 'parameters': {
                     'type': 'object',
                     'properties': {
                         'search_term': {
                             'type': 'string',
-                            'description': 'The search query to look up on the web'
-                        },
-                        'num_results': {
-                            'type': 'integer',
-                            'description': 'Maximum number of results to return'
+                            'description': 'The search term to look up on the web. Be specific and include relevant keywords for better results. For technical queries, include version numbers or dates if relevant.'
                         },
                         'explanation': {
                             'type': 'string',
-                            'description': 'Explanation for why this search is being performed'
+                            'description': 'One sentence explanation as to why this tool is being used, and how it contributes to the goal.'
                         }
                     },
                     'required': ['search_term']

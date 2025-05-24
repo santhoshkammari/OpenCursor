@@ -935,70 +935,142 @@ class Tools:
             except Exception as e:
                 return f"Error finding usages: {str(e)}"
 
-        async def web_search(search_term: str, explanation: str = "") -> str:
+        def diff_history(explanation: str = "") -> str:
             """
-            Search the web for real-time information about any topic. Use this tool when you need up-to-date information that might not be available in your training data, or when you need to verify current facts. The search results will include relevant snippets and URLs from web pages. This is particularly useful for questions about current events, technology updates, or any topic that requires recent information.
+            Retrieve the history of recent changes made to files in the workspace.
+            This tool helps understand what modifications were made recently, providing information
+            about which files were changed, when they were changed, and how many lines were added or removed.
             
             Args:
-                search_term (str): The search term to look up on the web. Be specific and include relevant keywords for better results. For technical queries, include version numbers or dates if relevant.
-                explanation (str): One sentence explanation as to why this tool is being used, and how it contributes to the goal.
+                explanation (str): One sentence explanation as to why this tool is being used
                 
             Returns:
-                str: Search results with snippets and URLs
+                str: Recent change history
             """
             try:
-                # Try to use playwright-based search if available
-                try:
-                    # First attempt with the playwright tool
-                    from liteauto.parselite import asearch
-                    results = await asearch(search_term, "google")
-                    
-                    # Format the results
-                    formatted_results = []
-                    for result in results[:5]:  # Limit to top 5 results
-                        title = result.get('title', '')
-                        url = result.get('url', '')
-                        snippet = result.get('snippet', '')
-                        
-                        formatted_results.append(f"- [{title}]({url})\n  {snippet}\n")
-                    
-                    return "\n".join(formatted_results)
-                except:
-                    # Fallback to regular HTTP request
-                    pass
+                # Run git log with stat to get recent changes
+                result = subprocess.run(
+                    ['git', 'log', '--stat', '--pretty=format:%h - %an, %ar : %s', '-n', '10'],
+                    cwd=self.workspace_root,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    check=False
+                )
                 
-                # Simple fallback using a JSON API
-                search_url = f"https://serpapi.com/search?q={search_term}&api_key=YOUR_API_KEY"
+                if result.returncode != 0:
+                    # Try to determine if this is a git repository
+                    git_check = subprocess.run(
+                        ['git', 'rev-parse', '--is-inside-work-tree'],
+                        cwd=self.workspace_root,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        check=False
+                    )
+                    
+                    if git_check.returncode != 0:
+                        return "The workspace is not a git repository. Cannot retrieve change history."
+                    else:
+                        return f"Error retrieving git history: {result.stderr}"
                 
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(search_url) as response:
-                        if response.status == 200:
-                            data = await response.json()
-                            
-                            # Extract and format results
-                            formatted_results = []
-                            if 'organic_results' in data:
-                                for result in data['organic_results'][:5]:
-                                    title = result.get('title', '')
-                                    url = result.get('link', '')
-                                    snippet = result.get('snippet', '')
-                                    
-                                    formatted_results.append(f"- [{title}]({url})\n  {snippet}\n")
-                                
-                                return "\n".join(formatted_results)
-                            else:
-                                return "No search results found."
-                        else:
-                            return f"Error: Received status code {response.status}"
-            
+                if not result.stdout.strip():
+                    return "No recent changes found in the git history."
+                
+                return f"Recent changes in the repository:\n\n{result.stdout}"
+                
             except Exception as e:
-                # Simulated search results as fallback
-                return f"Web search for '{search_term}' failed: {str(e)}\n\nPlease use real web search APIs in production."
-        
+                return f"Error retrieving change history: {str(e)}"
+
+        def grep_search(query: str, include_pattern: str = None, exclude_pattern: str = None, case_sensitive: bool = False, explanation: str = "") -> str:
+            """
+            Fast text-based regex search that finds exact pattern matches within files or directories.
+            
+            This is best for finding exact text matches or regex patterns.
+            More precise than semantic search for finding specific strings or patterns.
+            This is preferred over semantic search when we know the exact symbol/function name/etc. to search in some set of directories/file types.
+            
+            Args:
+                query (str): The regex pattern to search for
+                include_pattern (str): Glob pattern for files to include (e.g. '*.ts' for TypeScript files)
+                exclude_pattern (str): Glob pattern for files to exclude
+                case_sensitive (bool): Whether the search should be case sensitive
+                explanation (str): One sentence explanation as to why this tool is being used
+                
+            Returns:
+                str: Search results
+            """
+            try:
+                # Build the ripgrep command
+                cmd = ['rg', '--line-number']
+                
+                # Add case sensitivity option
+                if not case_sensitive:
+                    cmd.append('--ignore-case')
+                
+                # Add include pattern if provided
+                if include_pattern:
+                    cmd.extend(['--glob', include_pattern])
+                
+                # Add exclude pattern if provided
+                if exclude_pattern:
+                    cmd.extend(['--glob', f'!{exclude_pattern}'])
+                
+                # Add max count to avoid overwhelming output
+                cmd.extend(['--max-count', '50'])
+                
+                # Add the search pattern and path
+                cmd.append(query)
+                cmd.append(self.workspace_root)
+                
+                # Run the command
+                result = subprocess.run(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    check=False
+                )
+                
+                if result.returncode != 0 and result.returncode != 1:  # rg returns 1 when no matches found
+                    # Check if ripgrep is installed
+                    check_rg = subprocess.run(
+                        ['which', 'rg'],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        check=False
+                    )
+                    
+                    if check_rg.returncode != 0:
+                        return "Error: ripgrep (rg) is not installed. Please install it to use this tool."
+                    else:
+                        return f"Error executing grep search: {result.stderr}"
+                
+                if not result.stdout.strip():
+                    return f"No matches found for pattern: {query}"
+                
+                # Format the results
+                relative_paths = []
+                for line in result.stdout.splitlines():
+                    parts = line.split(':', 2)
+                    if len(parts) >= 2:
+                        # Convert absolute path to relative path
+                        abs_path = parts[0]
+                        rel_path = os.path.relpath(abs_path, self.workspace_root)
+                        line = f"{rel_path}:{parts[1]}" + (f":{parts[2]}" if len(parts) > 2 else "")
+                    relative_paths.append(line)
+                
+                return f"Search results for pattern '{query}':\n\n" + "\n".join(relative_paths)
+                
+            except Exception as e:
+                return f"Error performing grep search: {str(e)}"
+
         # Register the functions
         self.register_function(fetch_webpage)
         self.register_function(semantic_search)
         self.register_function(codebase_search)
         self.register_function(reapply)
         self.register_function(list_code_usages)
-        self.register_function(web_search)
+        self.register_function(diff_history)
+        self.register_function(grep_search)
