@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import re
 from typing import Dict, List, Optional, Any
@@ -50,7 +51,8 @@ class PlaywrightBrowser:
     
     async def get_clickable_elements(self):
         dom_service = DomService(self.page)
-        return await dom_service.get_clickable_elements()
+        dom_state = await dom_service.get_clickable_elements()
+        return dom_state
     
     async def get_search_keyword_index(self):
         """Get the index of the search element in the DOM"""
@@ -181,11 +183,7 @@ class PlaywrightBrowser:
             
             # Enter search query
             await self.keyboard_insert_text(query)
-            await asyncio.sleep(0.5)  # Wait briefly
-            
-            # Press Enter to search
-            await self.keyboard_press_enter()
-            await asyncio.sleep(2)  # Wait for search results to load
+            await asyncio.sleep(1)  # Wait briefly
             
             # Get clickable elements from DOM
             dom_state = await self.get_clickable_elements()
@@ -193,8 +191,8 @@ class PlaywrightBrowser:
             # Convert DOM elements to a nicely formatted dictionary
             results = []
             for idx, element in dom_state.selector_map.items():
-                # Only include visible and interactive elements
-                if element.is_visible and element.is_interactive:
+                # Only include visible and interactive elements and in viewport and has href
+                if element.is_visible and element.is_interactive and element.is_in_viewport and element.attributes.get("href"):
                     result = {
                         "index": idx,
                         "title": element.get_all_text_till_next_clickable_element(),
@@ -205,13 +203,13 @@ class PlaywrightBrowser:
                         "is_in_viewport": element.is_in_viewport
                     }
                     results.append(result)
-            
-            return {
+
+            return json.dumps({
                 "query": query,
                 "url": url or self.page.url,
                 "total_results": len(results),
                 "results": results
-            }
+            })
         except Exception as e:
             print(f"Error in search_inside_webpage_using_keyboard_shortcut: {str(e)}")
             return {"error": str(e), "query": query, "url": url or self.page.url, "results": []}
@@ -249,11 +247,8 @@ class PlaywrightBrowser:
             
             # Enter search query
             await self.keyboard_insert_text(query)
-            await asyncio.sleep(0.5)  # Wait briefly
+            await asyncio.sleep(1)  # Wait briefly
             
-            # Press Enter to search
-            await self.keyboard_press_enter()
-            await asyncio.sleep(2)  # Wait for search results to load
             
             # Get clickable elements from DOM
             dom_state = await self.get_clickable_elements()
@@ -273,13 +268,14 @@ class PlaywrightBrowser:
                         "is_in_viewport": element.is_in_viewport
                     }
                     results.append(result)
+
             
-            return {
+            return json.dumps({
                 "query": query,
                 "url": url or self.page.url,
                 "total_results": len(results),
                 "results": results
-            }
+            })
         except Exception as e:
             print(f"Error in search_inside_webpage_using_dom_element: {str(e)}")
             return {"error": str(e), "query": query, "url": url or self.page.url, "results": []}
