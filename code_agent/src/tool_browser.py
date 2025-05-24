@@ -177,6 +177,11 @@ class PlaywrightBrowser:
             if url!=self.page.url:
                 await self.navigate_to(url)
             
+            # Get current page URL for resolving relative URLs
+            current_url = self.page.url
+            base_url_match = re.match(r'(https?://[^/]+)', current_url)
+            base_url = base_url_match.group(1) if base_url_match else ""
+            
             # Press Ctrl+K to open search
             await self.keyboard_press('Control+k')
             await asyncio.sleep(1)  # Wait for search input to appear
@@ -193,10 +198,26 @@ class PlaywrightBrowser:
             for idx, element in dom_state.selector_map.items():
                 # Only include visible and interactive elements and in viewport and has href
                 if element.is_visible and element.is_interactive and element.is_in_viewport and element.attributes.get("href"):
+                    href = element.attributes.get("href", "")
+                    
+                    # Convert relative URLs to absolute
+                    if href.startswith('/'):
+                        absolute_url = f"{base_url}{href}"
+                    elif not href.startswith(('http://', 'https://')):
+                        # Handle other relative URLs (without leading slash)
+                        path_parts = current_url.split('/')
+                        if len(path_parts) > 3:  # http://domain.com/path
+                            parent_path = '/'.join(path_parts[:-1]) + '/'
+                            absolute_url = f"{parent_path}{href}"
+                        else:
+                            absolute_url = f"{current_url.rstrip('/')}/{href}"
+                    else:
+                        absolute_url = href
+                    
                     result = {
                         "index": idx,
                         "title": element.get_all_text_till_next_clickable_element(),
-                        "url": element.attributes.get("href", ""),
+                        "url": absolute_url,
                         "tag_name": element.tag_name,
                         "description": element.attributes.get("aria-label", ""),
                         "is_top_element": element.is_top_element,
@@ -234,6 +255,11 @@ class PlaywrightBrowser:
             if url!=self.page.url:
                 await self.navigate_to(url)
             
+            # Get current page URL for resolving relative URLs
+            current_url = self.page.url
+            base_url_match = re.match(r'(https?://[^/]+)', current_url)
+            base_url = base_url_match.group(1) if base_url_match else ""
+            
             # Get search element index
             search_keyword_index = await self.get_search_keyword_index()
             
@@ -257,10 +283,26 @@ class PlaywrightBrowser:
             for idx, element in dom_state.selector_map.items():
                 # Only include visible and interactive elements
                 if element.is_visible and element.is_interactive:
+                    href = element.attributes.get("href", "")
+                    
+                    # Convert relative URLs to absolute
+                    if href.startswith('/'):
+                        absolute_url = f"{base_url}{href}"
+                    elif href and not href.startswith(('http://', 'https://')):
+                        # Handle other relative URLs (without leading slash)
+                        path_parts = current_url.split('/')
+                        if len(path_parts) > 3:  # http://domain.com/path
+                            parent_path = '/'.join(path_parts[:-1]) + '/'
+                            absolute_url = f"{parent_path}{href}"
+                        else:
+                            absolute_url = f"{current_url.rstrip('/')}/{href}"
+                    else:
+                        absolute_url = href
+                    
                     result = {
                         "index": idx,
                         "title": element.get_all_text_till_next_clickable_element(),
-                        "url": element.attributes.get("href", ""),
+                        "url": absolute_url if href else "",
                         "tag_name": element.tag_name,
                         "description": element.attributes.get("aria-label", ""),
                         "is_top_element": element.is_top_element,

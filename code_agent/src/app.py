@@ -326,6 +326,70 @@ class OpenCursorApp:
             
         self.console.print(table)
     
+    def _format_search_results(self, result: str) -> str:
+        """Format search results into Markdown format"""
+        try:
+            # Try to parse as JSON if possible
+            import json
+            data = json.loads(result)
+            
+            markdown_content = ""
+            
+            # Handle query information if present
+            if isinstance(data, dict) and "query" in data:
+                markdown_content += f"**Query:** {data['query']}\n\n"
+            
+            # Handle results array
+            results = []
+            if isinstance(data, dict) and "results" in data:
+                results = data["results"]
+            elif isinstance(data, list):
+                results = data
+                
+            # Format each result
+            for item in results:
+                if isinstance(item, dict):
+                    title = item.get("title", "").strip()
+                    url = item.get("url", "")
+                    description = item.get("description", "")
+                    
+                    # Extract domain from URL
+                    import re
+                    domain = ""
+                    if url:
+                        domain_match = re.search(r'https?://(?:www\.)?([^/]+)', url)
+                        domain = domain_match.group(1) if domain_match else url
+                    
+                    # Format the description
+                    desc_preview = ""
+                    if description:
+                        desc_preview = description[:50].strip() + "..."
+                        desc_preview = " ".join(desc_preview.split()).strip()
+
+                    try:
+                        desc_preview_2 = url.split(".com")[1]
+                    except:
+                        desc_preview_2 = ""
+                    
+                    # Create citation entry
+                    if url:
+                        markdown_content += f"- [{domain}]({url}) {title or desc_preview or desc_preview_2}\n"
+                    else:
+                        markdown_content += f"- {title or desc_preview}\n"
+            
+            return Markdown(markdown_content.strip())
+        except:
+            # Fallback for non-JSON content
+            lines = result.strip().split('\n')
+            markdown_content = ""
+            
+            for line in lines:
+                line = line.strip()
+                if line:
+                    markdown_content += f"- {line}\n"
+                    
+            return Markdown(markdown_content.strip())
+
     def display_tool_results(self):
         """Display recent tool results in a nice format"""
         if not self.tool_results:
@@ -343,8 +407,11 @@ class OpenCursorApp:
                 web_results = self._format_web_search_results(result)
                 table.add_row(tool_name, web_results)
             elif tool_name == "fetch_webpage":
-                fetch_webpage_table = self._format_fetch_webpage_results(result)
-                table.add_row(tool_name, fetch_webpage_table)
+                fetch_webpage_results = self._format_fetch_webpage_results(result)
+                table.add_row(tool_name, fetch_webpage_results)
+            elif tool_name in ["search_in_docs_with_keyboard_shortcut", "search_in_docs_with_dom_element"]:
+                search_results = self._format_search_results(result)
+                table.add_row(tool_name, search_results)
             elif tool_name in ["read_file", "edit_file", "grep_search", "codebase_search"]:
                 # For code-related results, use syntax highlighting where possible
                 if "```" in result:
