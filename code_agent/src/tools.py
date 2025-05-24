@@ -10,6 +10,7 @@ from rich.console import Console
 
 from .llm import LLMClient
 from .tool_playwright import register_playwright_search_tool
+from .tool_browser import register_browser_search_tools
 
 
 class Tools:
@@ -77,6 +78,9 @@ class Tools:
         # Math tools
         self.register_math_tools()
         
+        # Browser search tools
+        register_playwright_search_tool(self)
+        register_browser_search_tools(self)
         
         return self.tools
 

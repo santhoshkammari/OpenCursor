@@ -53,10 +53,15 @@ class PlaywrightBrowser:
         return await dom_service.get_clickable_elements()
     
     async def get_search_keyword_index(self):
+        """Get the index of the search element in the DOM"""
         dom_state = await self.get_clickable_elements()
-        #aria-label="Search"
-        for element_key,element in dom_state.selector_map.items():
-            if element.attributes.get("aria-label") == "Search":
+        # Look for elements with aria-label="Search" or similar search indicators
+        for element_key, element in dom_state.selector_map.items():
+            if (element.attributes.get("aria-label") == "Search" or 
+                element.attributes.get("placeholder", "").lower().find("search") >= 0 or
+                element.attributes.get("id", "").lower().find("search") >= 0 or
+                element.attributes.get("name", "").lower().find("search") >= 0 or
+                element.attributes.get("title", "").lower().find("search") >= 0):
                 return element_key
         return None
 
@@ -148,6 +153,114 @@ class PlaywrightBrowser:
             await self.browser.close()
         if self.playwright:
             await self.playwright.stop()
+
+    async def search_inside_browser_using_ctrl_plus_k_approach(self, query: str) -> dict:
+        """
+        Search inside browser using keyboard shortcut Ctrl+K
+        
+        Args:
+            query (str): The search query to enter
+            
+        Returns:
+            dict: Dictionary of search results with clickable elements
+        """
+        try:
+            # Press Ctrl+K to open search
+            await self.keyboard_press('Control+k')
+            await asyncio.sleep(1)  # Wait for search input to appear
+            
+            # Enter search query
+            await self.keyboard_insert_text(query)
+            await asyncio.sleep(0.5)  # Wait briefly
+            
+            # Press Enter to search
+            await self.keyboard_press_enter()
+            await asyncio.sleep(2)  # Wait for search results to load
+            
+            # Get clickable elements from DOM
+            dom_state = await self.get_clickable_elements()
+            
+            # Convert DOM elements to a nicely formatted dictionary
+            results = []
+            for idx, element in dom_state.selector_map.items():
+                # Only include visible and interactive elements
+                if element.is_visible and element.is_interactive:
+                    result = {
+                        "index": idx,
+                        "title": element.get_all_text_till_next_clickable_element(),
+                        "url": element.attributes.get("href", ""),
+                        "tag_name": element.tag_name,
+                        "description": element.attributes.get("aria-label", ""),
+                        "is_top_element": element.is_top_element,
+                        "is_in_viewport": element.is_in_viewport
+                    }
+                    results.append(result)
+            
+            return {
+                "query": query,
+                "total_results": len(results),
+                "results": results
+            }
+        except Exception as e:
+            print(f"Error in search_inside_browser_using_ctrl_plus_k_approach: {str(e)}")
+            return {"error": str(e), "query": query, "results": []}
+
+    async def search_inside_browser(self, query: str) -> dict:
+        """
+        Search inside browser using DOM element approach
+        
+        Args:
+            query (str): The search query to enter
+            
+        Returns:
+            dict: Dictionary of search results with clickable elements
+        """
+        try:
+            # Get search element index
+            search_keyword_index = await self.get_search_keyword_index()
+            
+            # Click on the search element
+            success = await self.click_element_by_index(search_keyword_index)
+            if not success:
+                return {"error": "Failed to click search element", "query": query, "results": []}
+            
+            await asyncio.sleep(1)  # Wait for search input to appear
+            
+            # Enter search query
+            await self.keyboard_insert_text(query)
+            await asyncio.sleep(0.5)  # Wait briefly
+            
+            # Press Enter to search
+            await self.keyboard_press_enter()
+            await asyncio.sleep(2)  # Wait for search results to load
+            
+            # Get clickable elements from DOM
+            dom_state = await self.get_clickable_elements()
+            
+            # Convert DOM elements to a nicely formatted dictionary
+            results = []
+            for idx, element in dom_state.selector_map.items():
+                # Only include visible and interactive elements
+                if element.is_visible and element.is_interactive:
+                    result = {
+                        "index": idx,
+                        "title": element.get_all_text_till_next_clickable_element(),
+                        "url": element.attributes.get("href", ""),
+                        "tag_name": element.tag_name,
+                        "description": element.attributes.get("aria-label", ""),
+                        "is_top_element": element.is_top_element,
+                        "is_in_viewport": element.is_in_viewport
+                    }
+                    results.append(result)
+            
+            return {
+                "query": query,
+                "total_results": len(results),
+                "results": results
+            }
+        except Exception as e:
+            print(f"Error in search_inside_browser: {str(e)}")
+            return {"error": str(e), "query": query, "results": []}
 
 
 class PlaywrightSearch:
@@ -338,10 +451,98 @@ def register_playwright_search_tool(tools_instance):
         }
     )
 
-  
+# Function to register browser search tools with the Tools class
+def register_browser_search_tools(tools_instance):
+    """Register browser search tools with the Tools instance"""
     
-
+    async def search_inside_browser_using_ctrl_plus_k(query: str, explanation: str = "") -> dict:
+        """
+        Search inside the browser using Ctrl+K approach
         
+        Args:
+            query (str): The search query to enter
+            explanation (str): Explanation for why this search is being performed
+            
+        Returns:
+            dict: Dictionary of search results with clickable elements
+        """
+        browser = PlaywrightBrowser(headless=False)
+        try:
+            await browser.initialize()
+            results = await browser.search_inside_browser_using_ctrl_plus_k_approach(query)
+            return results
+        finally:
+            await browser.close()
+    
+    async def search_inside_browser_by_dom(query: str, explanation: str = "") -> dict:
+        """
+        Search inside the browser using DOM element approach
+        
+        Args:
+            query (str): The search query to enter
+            explanation (str): Explanation for why this search is being performed
+            
+        Returns:
+            dict: Dictionary of search results with clickable elements
+        """
+        browser = PlaywrightBrowser(headless=False)
+        try:
+            await browser.initialize()
+            results = await browser.search_inside_browser(query)
+            return results
+        finally:
+            await browser.close()
+    
+    # Register the functions with the Tools instance
+    tools_instance.register_function(
+        search_inside_browser_using_ctrl_plus_k,
+        {
+            'type': 'function',
+            'function': {
+                'name': 'search_inside_browser_using_ctrl_plus_k',
+                'description': 'Search inside the browser using Ctrl+K keyboard shortcut approach',
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'query': {
+                            'type': 'string',
+                            'description': 'The search query to enter'
+                        },
+                        'explanation': {
+                            'type': 'string',
+                            'description': 'Explanation for why this search is being performed'
+                        }
+                    },
+                    'required': ['query']
+                }
+            }
+        }
+    )
+    
+    tools_instance.register_function(
+        search_inside_browser_by_dom,
+        {
+            'type': 'function',
+            'function': {
+                'name': 'search_inside_browser_by_dom',
+                'description': 'Search inside the browser using DOM element approach',
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'query': {
+                            'type': 'string',
+                            'description': 'The search query to enter'
+                        },
+                        'explanation': {
+                            'type': 'string',
+                            'description': 'Explanation for why this search is being performed'
+                        }
+                    },
+                    'required': ['query']
+                }
+            }
+        }
+    )
 
 async def test():
     urls =[
