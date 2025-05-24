@@ -8,6 +8,7 @@ import subprocess
 from typing import List, Dict, Optional, Set, Union
 from pathlib import Path
 
+import rich
 from rich.console import Console
 from rich.panel import Panel
 from rich.layout import Layout
@@ -341,6 +342,9 @@ class OpenCursorApp:
                 # Create a nested table for web search results
                 web_results = self._format_web_search_results(result)
                 table.add_row(tool_name, web_results)
+            elif tool_name == "fetch_webpage":
+                fetch_webpage_table = self._format_fetch_webpage_results(result)
+                table.add_row(tool_name, fetch_webpage_table)
             elif tool_name in ["read_file", "edit_file", "grep_search", "codebase_search"]:
                 # For code-related results, use syntax highlighting where possible
                 if "```" in result:
@@ -368,6 +372,36 @@ class OpenCursorApp:
             self.console.print(result_group)
         else:
             self.console.print(table)
+        
+    def _format_fetch_webpage_results(self, result: str) -> str:
+        """Format fetch webpage results into a nested table"""
+        # Create a nested table for web results
+        web_table = Table(expand=True)
+        web_table.add_column("Result", style="white")
+        
+        # Split the result by URL entries
+        url_entries = result.split("URL: ")[1:]
+        
+        for entry in url_entries:
+            if "Content:" in entry:
+                url, content = entry.split("Content:", 1)
+                url = url.strip()
+                content = content.strip()
+                
+                # Extract domain from URL
+                import re
+                domain = re.search(r'https?://(?:www\.)?([^/]+)', url)
+                domain = domain.group(1) if domain else url
+                
+                # Take just a snippet of the content (first 25 chars)
+                content_preview = content[:25].strip() + "..."
+                content_preview = " ".join(content_preview.split())
+                
+                # Format as citation style: "content_preview (domain)"
+                citation = f"{content_preview} ({domain})"
+                web_table.add_row(citation)
+        
+        return web_table
         
     def _format_web_search_results(self, result: str) -> str:
         """Format web search results into a nested table"""
