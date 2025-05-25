@@ -2,6 +2,8 @@
 
 An AI-powered code agent for workspace operations with a rich terminal UI.
 
+![UI](code_agent/images/image.png)
+
 ## Overview
 
 OpenCursor is a terminal-based AI coding assistant that helps you navigate, understand, and modify codebases. It provides both autonomous and interactive agent modes, along with direct LLM chat capabilities. The tool uses a variety of AI-powered features to help you work with code more efficiently.
