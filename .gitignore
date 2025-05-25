@@ -11,3 +11,5 @@ __pycache__/
 # Ignore .idea directory
 .idea/
 dist/
+test_edit.py
+test_edit.py

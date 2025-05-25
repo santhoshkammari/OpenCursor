@@ -7,6 +7,7 @@ import subprocess
 from typing import Callable, Dict, Any, Optional
 from difflib import unified_diff
 from rich.console import Console
+from sentence_transformers import SentenceTransformer
 
 from .llm import LLMClient
 from .tool_playwright import register_playwright_search_tool
@@ -20,6 +21,7 @@ class Tools:
         self.workspace_root = workspace_root or os.getcwd()
         self.available_functions = {}
         self.tools = []
+        self.model = SentenceTransformer('all-MiniLM-L6-v2',trust_remote_code=True)
 
     async def process_tool_calls(self, tool_calls, llm_client:LLMClient):
         """
@@ -47,6 +49,12 @@ class Tools:
                         result = await function(**function_args)
                     else:
                         result = function(**function_args)
+                        
+                    # Convert result to string if it's not already a string
+                    if isinstance(result,int):
+                        result = str(result)
+                    if isinstance(result, list):
+                        result = "\n".join(result)
                         
                     # Add the result to the LLM client
                     llm_client.add_message(role="tool", content=result, name=function_name)
@@ -186,15 +194,17 @@ class Tools:
     def register_file_tools(self):
         """Register file operation tools."""
         
-        def read_file(target_file: str, offset: int = 0, limit: int = None, should_read_entire_file: bool = False) -> str:
+        def read_file(target_file: str, start_line_one_indexed: int = 1, end_line_one_indexed_inclusive: int = None, should_read_entire_file: bool = False, explanation: str = "") -> str:
             """
-            Read the contents of a file.
+            Read the contents of a file. The output of this tool call will be the 1-indexed file contents from start_line_one_indexed to end_line_one_indexed_inclusive, together with a summary of the lines outside start_line_one_indexed and end_line_one_indexed_inclusive.
+            Note that this call can view at most 250 lines at a time and 200 lines minimum.
             
             Args:
                 target_file (str): Path to the file to read
-                offset (int): Line to start reading from (0-indexed)
-                limit (int): Maximum number of lines to read
-                should_read_entire_file (bool): Whether to read the entire file ignoring offset and limit
+                start_line_one_indexed (int): The one-indexed line number to start reading from (inclusive)
+                end_line_one_indexed_inclusive (int): The one-indexed line number to end reading at (inclusive)
+                should_read_entire_file (bool): Whether to read the entire file
+                explanation (str): One sentence explanation as to why this tool is being used
                 
             Returns:
                 str: The file contents
@@ -204,41 +214,83 @@ class Tools:
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     if should_read_entire_file:
-                        return f.read()
+                        content = f.read()
+                        return f"Requested to read the entire file.\nContents of {target_file}, lines 1-{content.count(os.linesep) + 1} (entire file):\n```\n{content}\n```"
                     
                     lines = f.readlines()
                 
-                # Apply offset and limit
-                start_idx = max(0, offset)
-                end_idx = len(lines) if limit is None else min(start_idx + limit, len(lines))
+                # Apply start and end line indices (convert from 1-indexed to 0-indexed)
+                start_idx = max(0, start_line_one_indexed - 1)
+                if end_line_one_indexed_inclusive is None:
+                    # If end line is not specified, limit to start + 250 lines or the end of file
+                    end_idx = min(start_idx + 250, len(lines))
+                else:
+                    end_idx = min(end_line_one_indexed_inclusive - 1, len(lines) - 1)
+                    # Enforce maximum of 250 lines
+                    if end_idx - start_idx + 1 > 250:
+                        end_idx = start_idx + 250 - 1
+                
+                # Ensure reading at least 200 lines if available
+                if end_idx - start_idx + 1 < 200 and len(lines) >= 200:
+                    end_idx = min(start_idx + 200 - 1, len(lines) - 1)
                 
                 # Include summary of lines outside the range
                 result = []
                 if start_idx > 0:
                     result.append(f"[Lines 1-{start_idx} omitted]")
                 
-                result.append(''.join(lines[start_idx:end_idx]))
+                selected_content = ''.join(lines[start_idx:end_idx+1])
                 
-                if end_idx < len(lines):
-                    result.append(f"[Lines {end_idx+1}-{len(lines)} omitted]")
+                # Display the range we're actually returning
+                start_line = start_idx + 1  # Convert back to 1-indexed
+                end_line = end_idx + 1      # Convert back to 1-indexed
                 
-                return '\n'.join(result)
+                if len(lines) > end_idx + 1:
+                    result.append(selected_content)
+                    result.append(f"[Lines {end_line+1}-{len(lines)} omitted]")
+                    return f"Requested to read lines {start_line_one_indexed}-{end_line_one_indexed_inclusive if end_line_one_indexed_inclusive is not None else ''}, but returning lines {start_line}-{end_line} to comply with line limits.\nContents of {target_file}, lines {start_line}-{end_line}:\n```\n{''.join(result)}\n```"
+                else:
+                    result.append(selected_content)
+                    return f"Requested to read lines {start_line_one_indexed}-{end_line_one_indexed_inclusive if end_line_one_indexed_inclusive is not None else ''}, but returning lines {start_line}-{end_line} to give more context.\nContents of {target_file}, lines {start_line}-{end_line}:\n```\n{''.join(result)}\n```"
             except Exception as e:
                 return f"Error reading file: {str(e)}"
         
         def edit_file(target_file: str, code_edit: str, instructions: str = "") -> str:
             """
-            Edit a file with the specified code changes.
-            
-            Args:
-                target_file (str): Path to the file to edit
-                code_edit (str): The code edits to apply
-                instructions (str): Instructions for applying the edit
-                
-            Returns:
-                str: Result of the operation
+            Use this tool to propose an edit to an existing file.
+            This will be read by a less intelligent model which will quickly apply the edit. You should make it clear what the edit is, while also minimizing the unchanged code you write.
+            When writing the edit, you should specify each edit in sequence, with the special comment // ... existing code ... to represent unchanged code in between edited lines.
+            For example:
+            // ... existing code ...
+            FIRST_EDIT
+            // ... existing code ...
+            SECOND_EDIT
+            // ... existing code ...
+            THIRD_EDIT
+            // ... existing code ...
+            You should still bias towards repeating as few lines of the original file as possible to convey the change.
+            But, each edit should contain sufficient context of unchanged lines around the code you're editing to resolve ambiguity.
+            DO NOT omit spans of pre-existing code (or comments) without using the // ... existing code ... comment to indicate its absence. If you omit the existing code comment, the model may inadvertently delete these lines.
+            Make sure it is clear what the edit should be, and where it should be applied.
+            You should specify the following arguments before the others: [target_file]
             """
             file_path = os.path.join(self.workspace_root, target_file) if not os.path.isabs(target_file) else target_file
+
+            ## print params nicely in table format using rich
+            console = Console()
+            console.print(f"[cyan]{instructions} in {target_file}[/cyan]")
+            
+            # Show code edit in a styled panel with filename as title
+            from rich.panel import Panel
+            from rich.markdown import Markdown
+            
+            # Create markdown with syntax highlighting
+            markdown = Markdown(f"```\n{code_edit}\n```")
+            # Display in panel with filename as title
+            console.print(Panel(markdown, title=f"[bold]{target_file}[/bold]", border_style="green"))
+            
+
+
             
             try:
                 # Create directory if it doesn't exist
@@ -255,9 +307,100 @@ class Tools:
                     with open(file_path, 'r', encoding='utf-8') as f:
                         existing_content = f.read()
                     
-                    # Here we would apply a more sophisticated diff algorithm
-                    # For now, we'll just replace the entire content
-                    new_content = code_edit
+                    # Determine the appropriate comment marker based on file extension
+                    ext = os.path.splitext(target_file)[1].lower()
+                    comment_marker = "// ... existing code ..."  # Default for most languages
+                    
+                    # Adjust comment marker based on file extension
+                    if ext in ['.py', '.sh', '.bash', '.rb']:
+                        comment_marker = "// ... existing code ..."
+                    elif ext in ['.html', '.xml']:
+                        comment_marker = "<!-- ... existing code ... -->"
+                    elif ext in ['.lua', '.hs']:
+                        comment_marker = "-- ... existing code ..."
+                    
+
+                    
+                    # Split existing content into lines for embedding
+                    existing_lines = existing_content.splitlines()
+                    
+                    # Generate embeddings for each line of the existing content
+                    existing_embeddings = self.model.encode(existing_lines)
+                    
+                    # Split the code edit into segments based on the comment marker
+                    edit_segments = code_edit.split(comment_marker)
+                    
+                    # Initialize the new content
+                    new_content_lines = []
+                    current_line_idx = 0
+                    
+                    # Process each segment
+                    for i, segment in enumerate(edit_segments):
+                        if i == 0 and segment.strip() == "":
+                            # Skip empty first segment
+                            continue
+                            
+                        # Clean the segment and split into lines
+                        segment_lines = segment.strip().splitlines()
+                        
+                        if not segment_lines:
+                            continue
+                            
+                        # Get the first line of the segment for matching
+                        anchor_line = segment_lines[0].strip()
+                        
+                        if i > 0:  # Not the first segment, need to find insertion point
+                            # Create embedding for anchor line
+                            anchor_embedding = self.model.encode([anchor_line])[0]
+                            
+                            # Calculate similarity with all existing lines
+                            import numpy as np
+                            similarities = np.dot(existing_embeddings, anchor_embedding)
+                            
+                            # Find the best match after the current position
+                            best_match_idx = -1
+                            best_score = -1
+                            
+                            for idx in range(current_line_idx, len(existing_lines)):
+                                if similarities[idx] > best_score:
+                                    best_score = similarities[idx]
+                                    best_match_idx = idx
+                            
+                            # If good match found, add lines up to that point
+                            if best_match_idx > current_line_idx and best_score > 0.7:
+                                new_content_lines.extend(existing_lines[current_line_idx:best_match_idx])
+                                current_line_idx = best_match_idx
+                        
+                        # Add the segment lines to the output
+                        new_content_lines.extend(segment_lines)
+                        
+                        # Update current line index by finding where segment ends in original
+                        if len(segment_lines) > 0:
+                            last_line = segment_lines[-1].strip()
+                            last_embedding = self.model.encode([last_line])[0]
+                            
+                            # Calculate similarity for the last line
+                            similarities = np.dot(existing_embeddings, last_embedding)
+                            
+                            # Find best match for the last line
+                            best_idx = -1
+                            best_score = -1
+                            
+                            for idx in range(current_line_idx, len(existing_lines)):
+                                if similarities[idx] > best_score:
+                                    best_score = similarities[idx]
+                                    best_idx = idx
+                            
+                            if best_idx >= 0 and best_score > 0.7:
+                                current_line_idx = best_idx + 1
+                    
+                    # Add any remaining lines from the original file
+                    if current_line_idx < len(existing_lines):
+                        new_content_lines.extend(existing_lines[current_line_idx:])
+                    
+                    # Join the lines back into content
+                    new_content = '\n'.join(new_content_lines)
+                        
                 else:
                     # Create new file
                     existing_content = ""
@@ -476,18 +619,39 @@ class Tools:
     def register_terminal_tools(self):
         """Register terminal command execution tools."""
         
-        async def run_terminal_cmd(command: str, is_background: bool = False) -> str:
+        async def run_terminal_cmd(command: str, is_background: bool = False, require_user_approval: bool = True, explanation: str = "") -> str:
             """
-            Run a terminal command.
+            PROPOSE a command to run on behalf of the user.
+            If you have this tool, note that you DO have the ability to run commands directly on the USER's system.
+            Note that the user will have to approve the command before it is executed.
+            The user may reject it if it is not to their liking, or may modify the command before approving it. If they do change it, take those changes into account.
+            The actual command will NOT execute until the user approves it. The user may not approve it immediately. Do NOT assume the command has started running.
             
             Args:
                 command (str): The command to run
                 is_background (bool): Whether to run in background
+                require_user_approval (bool): Whether the user must approve the command before it is executed
+                explanation (str): Explanation for why this command needs to be run
                 
             Returns:
                 str: Command output
             """
             try:
+                # If user approval is required, ask for confirmation
+                if require_user_approval:
+                    console = Console()
+                    console.print(f"[yellow]Command to be executed:[/yellow] {command}")
+                    if explanation:
+                        console.print(f"[cyan]Reason:[/cyan] {explanation}")
+                    
+                    if is_background:
+                        console.print("[cyan]This command will run in the background[/cyan]")
+                    
+                    confirmation = input("Do you approve this command? (y/n): ").strip().lower()
+                    
+                    if confirmation != 'y' and confirmation != 'yes':
+                        return "Command execution cancelled by user"
+                
                 # Use the workspace_root as the cwd for command execution
                 process = await asyncio.create_subprocess_shell(
                     command,
@@ -522,18 +686,26 @@ class Tools:
             'type': 'function',
             'function': {
                 'name': 'run_terminal_cmd',
-                'description': 'Run a terminal command',
+                'description': 'PROPOSE a command to run on behalf of the user',
                 'parameters': {
                     'type': 'object',
-                    'required': ['command'],
+                    'required': ['command', 'is_background', 'require_user_approval'],
                     'properties': {
                         'command': {
                             'type': 'string',
-                            'description': 'The command to run'
+                            'description': 'The terminal command to execute'
                         },
                         'is_background': {
                             'type': 'boolean',
-                            'description': 'Whether to run in background'
+                            'description': 'Whether the command should be run in the background'
+                        },
+                        'require_user_approval': {
+                            'type': 'boolean',
+                            'description': 'Whether the user must approve the command before it is executed'
+                        },
+                        'explanation': {
+                            'type': 'string',
+                            'description': 'One sentence explanation as to why this command needs to be run and how it contributes to the goal'
                         }
                     }
                 }
@@ -680,12 +852,16 @@ class Tools:
         
         def codebase_search(query: str, target_directories: list = None, explanation: str = "") -> str:
             """
-            Find code snippets from the codebase relevant to the search query.
+            Find snippets of code from the codebase most relevant to the search query.
+            This is a semantic search tool, so the query should ask for something semantically matching what is needed.
+            If it makes sense to only search in particular directories, please specify them in the target_directories field.
+            Unless there is a clear reason to use your own search query, please just reuse the user's exact query with their wording.
+            Their exact wording/phrasing can often be helpful for the semantic search query. Keeping the same exact question format can also be helpful.
             
             Args:
-                query (str): The search query to find relevant code
-                target_directories (list): Optional list of directories to search in
-                explanation (str): Explanation for why the search is being performed
+                query (str): The search query to find relevant code. You should reuse the user's exact query with their wording unless there is a clear reason not to.
+                target_directories (list): Optional list of directories to search in (glob patterns for directories to search over)
+                explanation (str): One sentence explanation as to why this tool is being used, and how it contributes to the goal.
                 
             Returns:
                 str: Relevant code snippets
@@ -784,8 +960,9 @@ class Tools:
                 if results:
                     formatted_results = []
                     for result in results[:5]:  # Limit to top 5 results
+                        # Format according to required code citation format: ```startLine:endLine:filepath
                         formatted_results.append(
-                            f"File: {result['path']} (lines {result['start_line']}-{result['end_line']})\n```\n{result['snippet']}\n```\n"
+                            f"```{result['start_line']}:{result['end_line']}:{result['path']}\n{result['snippet']}\n```\n"
                         )
                     return "\n".join(formatted_results)
                 else:
@@ -859,9 +1036,142 @@ class Tools:
             except Exception as e:
                 return f"Error finding usages: {str(e)}"
 
+        def diff_history(explanation: str = "") -> str:
+            """
+            Retrieve the history of recent changes made to files in the workspace.
+            This tool helps understand what modifications were made recently, providing information
+            about which files were changed, when they were changed, and how many lines were added or removed.
+            
+            Args:
+                explanation (str): One sentence explanation as to why this tool is being used
+                
+            Returns:
+                str: Recent change history
+            """
+            try:
+                # Run git log with stat to get recent changes
+                result = subprocess.run(
+                    ['git', 'log', '--stat', '--pretty=format:%h - %an, %ar : %s', '-n', '10'],
+                    cwd=self.workspace_root,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    check=False
+                )
+                
+                if result.returncode != 0:
+                    # Try to determine if this is a git repository
+                    git_check = subprocess.run(
+                        ['git', 'rev-parse', '--is-inside-work-tree'],
+                        cwd=self.workspace_root,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        check=False
+                    )
+                    
+                    if git_check.returncode != 0:
+                        return "The workspace is not a git repository. Cannot retrieve change history."
+                    else:
+                        return f"Error retrieving git history: {result.stderr}"
+                
+                if not result.stdout.strip():
+                    return "No recent changes found in the git history."
+                
+                return f"Recent changes in the repository:\n\n{result.stdout}"
+                
+            except Exception as e:
+                return f"Error retrieving change history: {str(e)}"
+
+        def grep_search(query: str, include_pattern: str = None, exclude_pattern: str = None, case_sensitive: bool = False, explanation: str = "") -> str:
+            """
+            Fast text-based regex search that finds exact pattern matches within files or directories.
+            
+            This is best for finding exact text matches or regex patterns.
+            More precise than semantic search for finding specific strings or patterns.
+            This is preferred over semantic search when we know the exact symbol/function name/etc. to search in some set of directories/file types.
+            
+            Args:
+                query (str): The regex pattern to search for
+                include_pattern (str): Glob pattern for files to include (e.g. '*.ts' for TypeScript files)
+                exclude_pattern (str): Glob pattern for files to exclude
+                case_sensitive (bool): Whether the search should be case sensitive
+                explanation (str): One sentence explanation as to why this tool is being used
+                
+            Returns:
+                str: Search results
+            """
+            try:
+                # Build the ripgrep command
+                cmd = ['rg', '--line-number']
+                
+                # Add case sensitivity option
+                if not case_sensitive:
+                    cmd.append('--ignore-case')
+                
+                # Add include pattern if provided
+                if include_pattern:
+                    cmd.extend(['--glob', include_pattern])
+                
+                # Add exclude pattern if provided
+                if exclude_pattern:
+                    cmd.extend(['--glob', f'!{exclude_pattern}'])
+                
+                # Add max count to avoid overwhelming output
+                cmd.extend(['--max-count', '50'])
+                
+                # Add the search pattern and path
+                cmd.append(query)
+                cmd.append(self.workspace_root)
+                
+                # Run the command
+                result = subprocess.run(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    check=False
+                )
+                
+                if result.returncode != 0 and result.returncode != 1:  # rg returns 1 when no matches found
+                    # Check if ripgrep is installed
+                    check_rg = subprocess.run(
+                        ['which', 'rg'],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        check=False
+                    )
+                    
+                    if check_rg.returncode != 0:
+                        return "Error: ripgrep (rg) is not installed. Please install it to use this tool."
+                    else:
+                        return f"Error executing grep search: {result.stderr}"
+                
+                if not result.stdout.strip():
+                    return f"No matches found for pattern: {query}"
+                
+                # Format the results
+                relative_paths = []
+                for line in result.stdout.splitlines():
+                    parts = line.split(':', 2)
+                    if len(parts) >= 2:
+                        # Convert absolute path to relative path
+                        abs_path = parts[0]
+                        rel_path = os.path.relpath(abs_path, self.workspace_root)
+                        line = f"{rel_path}:{parts[1]}" + (f":{parts[2]}" if len(parts) > 2 else "")
+                    relative_paths.append(line)
+                
+                return f"Search results for pattern '{query}':\n\n" + "\n".join(relative_paths)
+                
+            except Exception as e:
+                return f"Error performing grep search: {str(e)}"
+
         # Register the functions
         self.register_function(fetch_webpage)
         self.register_function(semantic_search)
         self.register_function(codebase_search)
         self.register_function(reapply)
         self.register_function(list_code_usages)
+        self.register_function(diff_history)
+        self.register_function(grep_search)

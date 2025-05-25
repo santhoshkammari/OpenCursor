@@ -5,8 +5,20 @@ import asyncio
 import argparse
 import time
 import subprocess
+import logging
 from typing import List, Dict, Optional, Set, Union
 from pathlib import Path
+
+# Configure logging to suppress INFO messages
+logging.basicConfig(level=logging.WARNING)
+
+# Silence standard library loggers
+for logger_name in ["asyncio", "urllib", "urllib3", "filelock"]:
+    logging.getLogger(logger_name).setLevel(logging.ERROR)
+
+# Explicitly silence specific loggers that are producing unwanted output
+for logger_name in ["telemetry", "sentence_transformers.SentenceTransformer"]:
+    logging.getLogger(logger_name).setLevel(logging.ERROR)
 
 import rich
 from rich.console import Console
@@ -30,6 +42,9 @@ from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.shortcuts import CompleteStyle
 
 from code_agent.src.agent import CodeAgent
+
+import os
+os.environ["ANONYMIZED_TELEMETRY"] = "false"
 
 OPENCURSOR_LOGO_V1 = """
   ____  _____  ______ _   _  _____ _    _ _____   _____  ____  _____  
@@ -181,6 +196,9 @@ class OpenCursorApp:
     def __init__(self, model_name: str = "qwen3_14b_q6k:latest", host: str = "http://192.168.170.76:11434", workspace_path: Optional[str] = None):
         # Use provided workspace path or current working directory
         self.current_workspace = Path(workspace_path).resolve() if workspace_path else Path.cwd()
+        
+        # Ensure logs are silenced
+        logging.getLogger().setLevel(logging.WARNING)
         
         # Initialize agent with current workspace
         self.agent = CodeAgent(model_name=model_name, host=host, workspace_root=str(self.current_workspace))
@@ -997,6 +1015,16 @@ class OpenCursorApp:
 
 async def main():
     """Main entry point"""
+
+    # Disable all third-party library logs for a clean terminal
+    logging.getLogger().setLevel(logging.WARNING)
+    # Silence specific verbose loggers
+    for module in ["httpx", "urllib3", "httpcore", "telemetry", 
+                  "sentence_transformers", "filelock", "huggingface", 
+                  "transformers", "torch"]:
+        if logging.getLogger(module):
+            logging.getLogger(module).setLevel(logging.ERROR)
+
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="OpenCursor - An AI-powered code assistant")
     parser.add_argument("-m", "--model", default="qwen3_14b_q6k:latest", help="Model name to use")
@@ -1035,6 +1063,15 @@ if __name__ == "__main__":
 def entry_point():
     """Non-async entry point for the package"""
     try:
+        # Disable all third-party library logs for a clean terminal
+        logging.getLogger().setLevel(logging.WARNING)
+        # Silence specific verbose loggers
+        for module in ["httpx", "urllib3", "httpcore", "telemetry", 
+                      "sentence_transformers", "filelock", "huggingface", 
+                      "transformers", "torch"]:
+            if logging.getLogger(module):
+                logging.getLogger(module).setLevel(logging.ERROR)
+                
         asyncio.run(main())
     except KeyboardInterrupt:
         custom_theme = Theme({"orange": RichStyle(color=ORANGE_COLOR)})
