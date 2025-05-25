@@ -502,17 +502,18 @@ class OpenCursorApp:
         # Create a table for search results
         from rich.table import Table
         
-        table = Table(title=f"[bold]Search results for: {search_term}[/bold]", expand=True)
+        table = Table(title=f"[bold]Search results for: {search_term}[/bold]", expand=True, border_style=ORANGE_COLOR)
         table.add_column("#", style="cyan", no_wrap=True)
         table.add_column("Title", style="green")
-        table.add_column("URL", style="blue")
         table.add_column("Description", style="yellow")
         
         # Add rows to the table
         for match in matches:
             index, title, url, description = match
             description = description or "No description available"
-            table.add_row(index, title, url, description)
+            # Make title clickable with embedded URL
+            clickable_title = f"[link={url}]{title}[/link]"
+            table.add_row(index, clickable_title, description)
             
         return table
         
