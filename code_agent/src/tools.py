@@ -8,6 +8,7 @@ from typing import Callable, Dict, Any, Optional
 from difflib import unified_diff
 from rich.console import Console
 from sentence_transformers import SentenceTransformer
+from fuzzywuzzy import fuzz
 
 from .llm import LLMClient
 from .tool_playwright import register_playwright_search_tool
@@ -474,40 +475,54 @@ class Tools:
         self.register_function(edit_file)
         self.register_function(list_dir)
         
-        def search_files(query: str, file_pattern: str = "*") -> str:
+        def file_search(query: str, explanation: str = "") -> str:
             """
-            Search for files matching a pattern.
+            Fast file search based on fuzzy matching against file path. Use if you know part of the file path but don't know where it's located exactly. 
+            Response will be capped to 10 results. Make your query more specific if need to filter results further.
             
             Args:
-                query (str): Text to search for
-                file_pattern (str): File pattern to match
+                query (str): Fuzzy filename to search for
+                explanation (str): One sentence explanation as to why this tool is being used, and how it contributes to the goal
                 
             Returns:
                 str: Search results
             """
+            try:
+                from fuzzywuzzy import fuzz
+            except ImportError:
+                return "Error: fuzzywuzzy library is not installed. Please install it with 'pip install fuzzywuzzy python-Levenshtein'."
+                
             results = []
             
             try:
+                # Get all files in workspace
+                all_files = []
                 for root, dirs, files in os.walk(self.workspace_root):
                     for file in files:
-                        if file_pattern == "*" or re.match(file_pattern, file):
-                            file_path = os.path.join(root, file)
-                            rel_path = os.path.relpath(file_path, self.workspace_root)
-                            
-                            try:
-                                with open(file_path, 'r', encoding='utf-8') as f:
-                                    content = f.read()
-                                    
-                                if query.lower() in content.lower():
-                                    results.append(f"Found in: {rel_path}")
-                            except:
-                                # Skip files we can't read
-                                pass
+                        file_path = os.path.join(root, file)
+                        rel_path = os.path.relpath(file_path, self.workspace_root)
+                        all_files.append(rel_path)
+                
+                # Calculate fuzzy match scores
+                scored_files = []
+                for file_path in all_files:
+                    # Use token_set_ratio for better partial matching regardless of word order
+                    score = fuzz.token_set_ratio(query.lower(), file_path.lower())
+                    # Boost score if the query appears as a substring
+                    if query.lower() in file_path.lower():
+                        score += 20
+                    scored_files.append((file_path, score))
+                
+                # Sort by score in descending order
+                scored_files.sort(key=lambda x: x[1], reverse=True)
+                
+                # Take top 10 results with a minimum score threshold
+                results = [file for file, score in scored_files[:10] if score > 50]
                 
                 if results:
                     return "\n".join(results)
                 else:
-                    return f"No matches found for '{query}'"
+                    return f"No files found matching '{query}'"
             except Exception as e:
                 return f"Error searching files: {str(e)}"
         
@@ -617,7 +632,7 @@ class Tools:
         self.register_function(read_file)
         self.register_function(edit_file)
         self.register_function(list_dir)
-        self.register_function(search_files)
+        self.register_function(file_search)
         self.register_function(delete_file)
         self.register_function(search_replace)
 
@@ -631,12 +646,20 @@ class Tools:
             Note that the user will have to approve the command before it is executed.
             The user may reject it if it is not to their liking, or may modify the command before approving it. If they do change it, take those changes into account.
             The actual command will NOT execute until the user approves it. The user may not approve it immediately. Do NOT assume the command has started running.
+            If the step is WAITING for user approval, it has NOT started running.
+            In using these tools, adhere to the following guidelines:
+            1. Based on the contents of the conversation, you will be told if you are in the same shell as a previous step or a different shell.
+            2. If in a new shell, you should cd to the appropriate directory and do necessary setup in addition to running the command.
+            3. If in the same shell, the state will persist (eg. if you cd in one step, that cwd is persisted next time you invoke this tool).
+            4. For ANY commands that would use a pager or require user interaction, you should append | cat to the command (or whatever is appropriate). Otherwise, the command will break. You MUST do this for: git, less, head, tail, more, etc.
+            5. For commands that are long running/expected to run indefinitely until interruption, please run them in the background. To run jobs in the background, set is_background to true rather than changing the details of the command.
+            6. Dont include any newlines in the command.
             
             Args:
-                command (str): The command to run
+                command (str): The terminal command to execute
                 is_background (bool): Whether to run in background
-                require_user_approval (bool): Whether the user must approve the command before it is executed
-                explanation (str): Explanation for why this command needs to be run
+                require_user_approval (bool): Whether the user must approve the command before it is executed. Only set this to false if the command is safe and if it matches the user's requirements for commands that should be executed automatically.
+                explanation (str): One sentence explanation as to why this command needs to be run and how it contributes to the goal
                 
             Returns:
                 str: Command output
@@ -691,7 +714,7 @@ class Tools:
             'type': 'function',
             'function': {
                 'name': 'run_terminal_cmd',
-                'description': 'PROPOSE a command to run on behalf of the user',
+                'description': 'PROPOSE a command to run on behalf of the user.\nIf you have this tool, note that you DO have the ability to run commands directly on the USER\'s system.\nNote that the user will have to approve the command before it is executed.\nThe user may reject it if it is not to their liking, or may modify the command before approving it. If they do change it, take those changes into account.\nThe actual command will NOT execute until the user approves it. The user may not approve it immediately. Do NOT assume the command has started running.\nIf the step is WAITING for user approval, it has NOT started running.\nIn using these tools, adhere to the following guidelines:\n1. Based on the contents of the conversation, you will be told if you are in the same shell as a previous step or a different shell.\n2. If in a new shell, you should cd to the appropriate directory and do necessary setup in addition to running the command.\n3. If in the same shell, the state will persist (eg. if you cd in one step, that cwd is persisted next time you invoke this tool).\n4. For ANY commands that would use a pager or require user interaction, you should append  | cat to the command (or whatever is appropriate). Otherwise, the command will break. You MUST do this for: git, less, head, tail, more, etc.\n5. For commands that are long running/expected to run indefinitely until interruption, please run them in the background. To run jobs in the background, set is_background to true rather than changing the details of the command.\n6. Dont include any newlines in the command.',
                 'parameters': {
                     'type': 'object',
                     'required': ['command', 'is_background', 'require_user_approval'],
@@ -706,7 +729,7 @@ class Tools:
                         },
                         'require_user_approval': {
                             'type': 'boolean',
-                            'description': 'Whether the user must approve the command before it is executed'
+                            'description': 'Whether the user must approve the command before it is executed. Only set this to false if the command is safe and if it matches the user\'s requirements for commands that should be executed automatically.'
                         },
                         'explanation': {
                             'type': 'string',
