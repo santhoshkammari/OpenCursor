@@ -502,7 +502,8 @@ class OpenCursorApp:
         # Create a table for search results
         from rich.table import Table
         
-        table = Table(title=f"[bold]Search results for: {search_term}[/bold]", expand=True, border_style=ORANGE_COLOR)
+        table = Table(box=box.ROUNDED,title=f"[bold]Search results for: {search_term}[/bold]", expand=True, border_style=ORANGE_COLOR)
+
         table.add_column("#", style="cyan", no_wrap=True)
         table.add_column("Title", style="green")
         table.add_column("Description", style="yellow")
