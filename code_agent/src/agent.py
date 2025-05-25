@@ -10,7 +10,7 @@ from .tool_playwright import register_playwright_search_tool
 
 
 class CodeAgent:
-    def __init__(self, model_name: str = "qwen3_14b_q6k:latest", host: str = "http://192.168.170.76:11434", workspace_root: str = None):
+    def __init__(self, model_name: str = "qwen3_14b_q6k:latest", host: str = "http://192.168.170.76:11434", workspace_root: str = None, system_prompt: Optional[str] = None):
         """
         Initialize a CodeAgent that can use tools and execute tool calls.
 
@@ -18,11 +18,14 @@ class CodeAgent:
             model_name (str): The name of the Ollama model to use.
             host (str): The host URL for the Ollama API.
             workspace_root (str): The root directory of the workspace.
+            system_prompt (Optional[str]): Optional custom system prompt to use.
         """
         self.llm_client = LLMClient(model_name=model_name, host=host)
         self.tools_manager = Tools(workspace_root=workspace_root)
         self.register_tools()
         self.max_iterations = 25
+        self.model_name = model_name
+        self.custom_system_prompt = system_prompt
 
     def register_tools(self):
         """Register all available tools."""
@@ -59,7 +62,12 @@ class CodeAgent:
         self.llm_client.messages = []
         
         # Set the system prompt to interactive agent mode
-        self.llm_client.add_message("system", INTERACTIVE_AGENT_PROMPT)
+        if self.custom_system_prompt:
+            # Use custom system prompt if provided
+            self.llm_client.add_message("system", self.custom_system_prompt)
+        else:
+            # Use default interactive agent prompt
+            self.llm_client.add_message("system", INTERACTIVE_AGENT_PROMPT)
         
         # Add the initial user message
         self.llm_client.add_message("user", f"Task: {user_message}")
@@ -87,8 +95,13 @@ class CodeAgent:
         self.llm_client.messages = []
         
         # Set the system prompt to autonomous agent mode
-        system_prompt = SYSTEM_PROMPT.replace("<|user_workspace_path|>", str(self.tools_manager.workspace_root))
-        self.llm_client.add_message("system", system_prompt)
+        if self.custom_system_prompt:
+            # Use custom system prompt if provided
+            self.llm_client.add_message("system", self.custom_system_prompt)
+        else:
+            # Use default system prompt
+            system_prompt = SYSTEM_PROMPT.replace("<|user_workspace_path|>", str(self.tools_manager.workspace_root))
+            self.llm_client.add_message("system", system_prompt)
         
         # Add the initial user message
         self.llm_client.add_message("user", f"Task: {user_message}")

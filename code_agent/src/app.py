@@ -31,6 +31,7 @@ from rich import box
 from rich.markdown import Markdown
 from rich.theme import Theme
 from rich.style import Style as RichStyle
+from rich.console import Group
 
 # Add prompt_toolkit imports
 from prompt_toolkit import PromptSession
@@ -193,7 +194,7 @@ class OpenCursorCompleter(Completer):
             )
 
 class OpenCursorApp:
-    def __init__(self, model_name: str = "qwen3_14b_q6k:latest", host: str = "http://192.168.170.76:11434", workspace_path: Optional[str] = None):
+    def __init__(self, model_name: str = "qwen3_14b_q6k:latest", host: str = "http://192.168.170.76:11434", workspace_path: Optional[str] = None, system_prompt: Optional[str] = None):
         # Use provided workspace path or current working directory
         self.current_workspace = Path(workspace_path).resolve() if workspace_path else Path.cwd()
         
@@ -201,7 +202,7 @@ class OpenCursorApp:
         logging.getLogger().setLevel(logging.WARNING)
         
         # Initialize agent with current workspace
-        self.agent = CodeAgent(model_name=model_name, host=host, workspace_root=str(self.current_workspace))
+        self.agent = CodeAgent(model_name=model_name, host=host, workspace_root=str(self.current_workspace), system_prompt=system_prompt)
         
         # Create custom theme with orange accent color
         custom_theme = Theme({
@@ -333,16 +334,31 @@ class OpenCursorApp:
     def show_files_in_context(self):
         """Show files currently in context"""
         if not self.files_in_context:
-            self.console.print("[red]No files in context[/red]")
+            # Create an empty panel instead of text message
+            empty_panel = Panel(
+                "No files in context yet. Use [bold]@filename[/bold] or [bold]/add filename[/bold] to add files.",
+                title=f"[{ORANGE_COLOR} bold]Files in Context[/{ORANGE_COLOR} bold]",
+                border_style=ORANGE_COLOR,
+                box=box.ROUNDED
+            )
+            self.console.print(empty_panel)
             return
             
-        table = Table(title=f"[{ORANGE_COLOR} bold]Files in Context[/{ORANGE_COLOR} bold]", box=box.SIMPLE, border_style=ORANGE_COLOR)
+        # Create a table for files in context
+        table = Table(box=box.SIMPLE, border_style=ORANGE_COLOR)
         table.add_column("File", style="green")
         
         for file_path in sorted(self.files_in_context):
             table.add_row(str(file_path.relative_to(self.current_workspace)))
-            
-        self.console.print(table)
+        
+        # Wrap the table in a panel
+        files_panel = Panel(
+            table,
+            title=f"[{ORANGE_COLOR} bold]Files in Context[/{ORANGE_COLOR} bold]",
+            border_style=ORANGE_COLOR,
+            box=box.ROUNDED
+        )
+        self.console.print(files_panel)
     
     def _format_search_results(self, result: str) -> str:
         """Format search results into Markdown format"""
@@ -452,7 +468,6 @@ class OpenCursorApp:
             )
             
             # Create a group with both the table and summary panel
-            from rich.console import Group
             result_group = Group(table, summary_panel)
             self.console.print(result_group)
         else:
@@ -882,8 +897,24 @@ class OpenCursorApp:
         """Run the application"""
         # Show the logo and welcome message
         self.print_logo()
-        self.console.print("[bold green]Welcome to OpenCursor![/bold green] Type [bold]/help[/bold] for available commands.")
-        self.console.print(f"[bold cyan]Using workspace:[/bold cyan] {self.current_workspace}")
+        
+        # Create a welcome panel with system information
+        system_info = []
+        system_info.append(f"*Workspace:* {self.current_workspace}")
+        system_info.append(f"*OS:* {os.uname().sysname} {os.uname().release}")
+        system_info.append(f"*Model:* {self.agent.model_name}")
+        
+        welcome_panel = Panel(
+            Group(
+                Markdown("**Welcome to OpenCursor!** Type `/help` for available commands."),
+                Markdown("\n".join(system_info))
+            ),
+            title=f"[{ORANGE_COLOR} bold]System Information[/{ORANGE_COLOR} bold]",
+            border_style=ORANGE_COLOR,
+            box=box.ROUNDED
+        )
+        
+        self.console.print(welcome_panel)
         
         # Hook into agent's tool processing to capture tool results
         original_process_tool_calls = self.agent.tools_manager.process_tool_calls
@@ -1039,6 +1070,7 @@ async def main():
     parser.add_argument("--host", default="http://192.168.170.76:11434", help="Ollama host URL")
     parser.add_argument("-w", "--workspace", help="Path to workspace directory")
     parser.add_argument("-q", "--query", default=None, help="Initial query to process")
+    parser.add_argument("--no-thinking", action="store_true", help="Disable thinking process in responses")
     args = parser.parse_args()
     
     # Create custom theme with orange accent color
@@ -1052,11 +1084,19 @@ async def main():
     
     console = Console(theme=custom_theme, width=None)
     
+    # Modify system prompt based on no-thinking flag
+    system_prompt = None
+    if args.no_thinking:
+        # Import the system prompt and append /no_think
+        from code_agent.src.prompts import SYSTEM_PROMPT
+        system_prompt = SYSTEM_PROMPT + " /no_think"
+    
     # Create and run the app with parsed arguments
     app = OpenCursorApp(
         model_name=args.model,
         host=args.host,
-        workspace_path=args.workspace
+        workspace_path=args.workspace,
+        system_prompt=system_prompt
     )
     await app.run(initial_query=args.query)
 
