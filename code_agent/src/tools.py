@@ -628,6 +628,107 @@ class Tools:
             except Exception as e:
                 return f"Error performing search and replace: {str(e)}"
         
+        def file_str_replace(file: str, old_str: str, new_str: str, sudo: bool = False) -> str:
+            """
+            Replace specified string in a non-Python file (like .md, .txt, .sh files). Use for updating specific content in text-based files or fixing errors in code.
+            
+            Args:
+                file (str): Path of the file to perform replacement on
+                old_str (str): Original string to be replaced
+                new_str (str): New string to replace with
+                sudo (bool): Whether to use sudo privileges
+                
+            Returns:
+                str: Result of the operation
+            """
+            file_path = os.path.join(self.workspace_root, file) if not os.path.isabs(file) else file
+            
+            try:
+                # Check if file exists
+                if not os.path.exists(file_path):
+                    return f"Error: File {file} not found"
+                
+                # Check if file is a Python file (this tool is for non-Python files)
+                if file_path.endswith('.py'):
+                    return f"Error: This tool is intended for non-Python files like .md, .txt, .sh. For Python files, use search_replace instead."
+                
+                # Check file extension to ensure it's a text file
+                allowed_extensions = ['.md', '.txt', '.sh', '.bash', '.json', '.yml', '.yaml', '.html', '.css', '.js', '.jsx', '.ts', '.tsx', '.xml', '.csv']
+                if not any(file_path.endswith(ext) for ext in allowed_extensions) and '.' in os.path.basename(file_path):
+                    return f"Warning: File {file} may not be a text file. Proceeding anyway, but be cautious."
+                
+                # Read the file content
+                if sudo:
+                    # Use sudo to read the file
+                    read_cmd = ['sudo', 'cat', file_path]
+                    read_result = subprocess.run(
+                        read_cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        check=False
+                    )
+                    
+                    if read_result.returncode != 0:
+                        return f"Error reading file with sudo: {read_result.stderr}"
+                    
+                    content = read_result.stdout
+                else:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                
+                # Check if the string exists in the file
+                if old_str not in content:
+                    return f"Error: String '{old_str}' not found in {file}"
+                
+                # Count occurrences
+                occurrences = content.count(old_str)
+                
+                # Replace the string
+                new_content = content.replace(old_str, new_str)
+                
+                # Write the modified content back to the file
+                if sudo:
+                    # Use a temporary file and sudo to write
+                    temp_file = f"{file_path}.temp"
+                    with open(temp_file, 'w', encoding='utf-8') as f:
+                        f.write(new_content)
+                    
+                    # Move the temp file to the original with sudo
+                    write_cmd = ['sudo', 'mv', temp_file, file_path]
+                    write_result = subprocess.run(
+                        write_cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        check=False
+                    )
+                    
+                    if write_result.returncode != 0:
+                        return f"Error writing file with sudo: {write_result.stderr}"
+                else:
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        f.write(new_content)
+                
+                # Show a diff of the changes
+                diff = unified_diff(
+                    content.splitlines(keepends=True),
+                    new_content.splitlines(keepends=True),
+                    fromfile=f'a/{file}',
+                    tofile=f'b/{file}'
+                )
+                diff_text = ''.join(diff)
+                
+                result = f"Successfully replaced {occurrences} occurrence(s) of the specified string in {file}"
+                
+                if diff_text:
+                    result += f"\n\n[Changes Made]\n```diff\n{diff_text}\n```"
+                
+                return result
+                
+            except Exception as e:
+                return f"Error performing text file replacement: {str(e)}"
+        
         # Register file operation tools
         self.register_function(read_file)
         self.register_function(edit_file)
@@ -635,6 +736,7 @@ class Tools:
         self.register_function(file_search)
         self.register_function(delete_file)
         self.register_function(search_replace)
+        self.register_function(file_str_replace)
 
     def register_terminal_tools(self):
         """Register terminal command execution tools."""
