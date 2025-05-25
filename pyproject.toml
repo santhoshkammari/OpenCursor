@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "opencursor"
-version = "0.0.15"
+version = "0.0.16"
 description = "An AI-powered code agent for workspace operations"
 authors = [ "Kammari Santhosh",]
 readme = "README.md"
