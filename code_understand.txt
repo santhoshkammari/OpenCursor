@@ -119,4 +119,41 @@
 - Web search capabilities
 - Code editing and terminal command execution
 - Syntax highlighting for code display
-- Auto-completion for commands and file paths 
+- Auto-completion for commands and file paths
+
+## Key Design Patterns
+1. **Command Pattern**
+   - Commands are processed through a central method
+   - Each command is handled by a specific function
+
+2. **Factory Pattern**
+   - Tools are registered and created dynamically
+   - The Tools class acts as a factory for tool instances
+
+3. **Adapter Pattern**
+   - LLMClient adapts the Ollama API to a simpler interface
+   - PlaywrightBrowser adapts the Playwright API for web searches
+
+4. **Observer Pattern**
+   - Tool results are captured and displayed after execution
+   - The agent notifies the UI of its progress
+
+## Integration Points
+1. **LLM Integration**
+   - Uses Ollama API for LLM interactions
+   - Supports different models through configuration
+
+2. **Web Integration**
+   - Uses Playwright for web searches and browser automation
+   - Supports multiple search engines (Bing, DuckDuckGo)
+
+3. **Terminal Integration**
+   - Executes terminal commands through subprocess
+   - Captures and formats command output
+
+## Summary
+OpenCursor is a well-structured terminal-based AI coding assistant that provides a rich user interface using the Rich library. It offers multiple agent modes (autonomous, interactive, and chat), file context management, and a variety of tools for working with code. The codebase is organized into logical components with clear responsibilities, making it maintainable and extensible.
+
+The application uses a command-based interface with auto-completion for commands and file paths, making it user-friendly. It also provides rich formatting for tool results, including syntax highlighting for code and table-based displays for search results.
+
+The agent system is built around a tool-based architecture, where tools are registered with the agent and can be called by the LLM. This makes it easy to add new functionality by implementing new tools. The LLM client abstracts away the details of interacting with the Ollama API, making it easy to switch to different LLM providers if needed. 
