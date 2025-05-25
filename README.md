@@ -10,24 +10,24 @@ OpenCursor is a terminal-based AI coding assistant that helps you navigate, unde
 
 ## Features
 
-### Core Functionality
-- **AI-powered code assistance** with autonomous and interactive modes
-- **Rich terminal UI** with syntax highlighting and markdown support
-- **File context management** to focus on relevant files
-- **Repository exploration** and visualization
-- **Web search integration** for up-to-date information
-- **Code editing and terminal command execution** capabilities
+🤖 **Local LLM Support** - Works with Ollama models locally
 
-### Agent Modes
-- **Autonomous Mode**: Agent works step-by-step without user interaction
-- **Interactive Mode**: Agent performs one tool call at a time, waiting for user input
-- **Chat Mode**: Direct conversation with the LLM without using tools
+🔄 **Autonomous Mode** - Complete tasks without intervention
 
-### Tools
-- **File Operations**: Read, edit, list, search, and delete files
-- **Code Analysis**: Semantic search, grep search, and code usage analysis
-- **Terminal Operations**: Execute terminal commands
-- **Web Tools**: Search the web and fetch webpage content
+🌐 **Playwright Web Search** - No API limits or blocking
+
+📝 **Full Editor Toolkit** - Search, edit, delete files & run commands
+
+🔍 **Transparent UI** - See exactly what the model is doing
+
+## Example Queries
+
+- "Create a simple Flask API with user authentication"
+- "Refactor this React component to use hooks instead of classes"
+- "Find all usages of this function and update its parameters"
+- "Analyze this codebase and explain its architecture"
+- "Debug why this test is failing and propose a fix"
+- "Research and implement the latest best practices for API security"
 
 ## Installation
 
