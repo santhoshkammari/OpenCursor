@@ -2,8 +2,6 @@
 
 An AI-powered code agent for workspace operations with a rich terminal UI.
 
-![OpenCursor Logo](https://raw.githubusercontent.com/santhoshkammari/OpenCursor/main/assets/logo.png)
-
 ## Overview
 
 OpenCursor is a terminal-based AI coding assistant that helps you navigate, understand, and modify codebases. It provides both autonomous and interactive agent modes, along with direct LLM chat capabilities. The tool uses a variety of AI-powered features to help you work with code more efficiently.
@@ -93,13 +91,6 @@ OpenCursor provides several commands that you can use within the application:
 You can also use shortcuts:
 - `@filepath` to quickly add a file to the context
 
-## Code Block Formats
-
-OpenCursor supports various code block formats for better visualization:
-
-- ```language:filepath
-- ```startLine:endLine:filepath
-- ```language:startLine:endLine:filepath
 
 ## Development
 
