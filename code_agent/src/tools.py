@@ -442,11 +442,13 @@ class Tools:
         
         def list_dir(directory: str = ".",explanation:str="") -> str:
             """
-            List contents of a directory.
+            List the contents of a directory. The quick tool to use for discovery, before using more targeted tools like semantic search or file reading. 
+            Useful to try to understand the file structure before diving deeper into specific files. 
+            Can be used to explore the codebase
             
             Args:
                 directory (str): Path to directory to list
-                
+                explanation (str): One sentence explanation as to why this tool is being used
             Returns:
                 str: Directory contents
             """
@@ -511,7 +513,10 @@ class Tools:
         
         def delete_file(target_file: str, explanation: str = "") -> str:
             """
-            Delete a file.
+            Deletes a file at the specified path. The operation will fail gracefully if:
+            - The file doesn't exist
+            - The operation is rejected for security reasons
+            - The file cannot be deleted
             
             Args:
                 target_file (str): Path to the file to delete
@@ -1038,9 +1043,9 @@ class Tools:
 
         def diff_history(explanation: str = "") -> str:
             """
-            Retrieve the history of recent changes made to files in the workspace.
-            This tool helps understand what modifications were made recently, providing information
-            about which files were changed, when they were changed, and how many lines were added or removed.
+            Retrieve the history of recent changes made to files in the workspace. 
+            This tool helps understand what modifications were made recently, providing information about which files were changed, when they were changed, and how many lines were added or removed.
+            Use this tool when you need context about recent modifications to the codebase.
             
             Args:
                 explanation (str): One sentence explanation as to why this tool is being used
