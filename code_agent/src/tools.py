@@ -279,8 +279,15 @@ class Tools:
             ## print params nicely in table format using rich
             console = Console()
             console.print(f"[cyan]{instructions} in {target_file}[/cyan]")
-            console.print(f"[cyan]Code Edit:[/cyan] {code_edit}")
-            # show in panel of this code_edit
+            
+            # Show code edit in a styled panel with filename as title
+            from rich.panel import Panel
+            from rich.markdown import Markdown
+            
+            # Create markdown with syntax highlighting
+            markdown = Markdown(f"```\n{code_edit}\n```")
+            # Display in panel with filename as title
+            console.print(Panel(markdown, title=f"[bold]{target_file}[/bold]", border_style="green"))
             
 
 
