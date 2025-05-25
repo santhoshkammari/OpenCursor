@@ -435,7 +435,7 @@ class OpenCursorApp:
                 if "```" in result:
                     # Extract code blocks and format them
                     formatted_result = self._format_code_blocks(result)
-                    table.add_row(tool_name, formatted_result)
+                    table.add_row(tool_name, str(formatted_result))
                 else:
                     table.add_row(tool_name, result)
             else:
@@ -488,27 +488,33 @@ class OpenCursorApp:
         return Markdown(markdown_content.strip())
         
     def _format_web_search_results(self, result: str) -> str:
-        """Format web search results into a nested table"""
-        lines = result.strip().split('\n')
+        """Format web search results into a nice table"""
+        import re
         
-        # Create a nested table for web results
-        web_table = Table(box=None, expand=True)
-        web_table.add_column("Result", style="white")
+        # Extract search term
+        search_term_match = re.search(r"Search results for: (.+?)$", result.strip().split('\n')[0])
+        search_term = search_term_match.group(1) if search_term_match else "Unknown query"
         
-        current_result = []
-        for line in lines:
-            if line.strip() == "":
-                if current_result:
-                    web_table.add_row("\n".join(current_result))
-                    current_result = []
-            else:
-                current_result.append(line)
-                
-        # Add the last result if any
-        if current_result:
-            web_table.add_row("\n".join(current_result))
+        # Extract search results using regex
+        pattern = r"(\d+)\. (.+?)\n\s+URL: (.+?)\n(?:\s+Description: (.+?)\n)?\n"
+        matches = re.findall(pattern, result, re.DOTALL)
+        
+        # Create a table for search results
+        from rich.table import Table
+        
+        table = Table(title=f"[bold]Search results for: {search_term}[/bold]", expand=True)
+        table.add_column("#", style="cyan", no_wrap=True)
+        table.add_column("Title", style="green")
+        table.add_column("URL", style="blue")
+        table.add_column("Description", style="yellow")
+        
+        # Add rows to the table
+        for match in matches:
+            index, title, url, description = match
+            description = description or "No description available"
+            table.add_row(index, title, url, description)
             
-        return web_table
+        return table
         
     def _display_file_with_location(self, file_path: str, content: str, start_line: int = 1, end_line: Optional[int] = None):
         """
@@ -901,78 +907,78 @@ class OpenCursorApp:
         
         running = True
         while running:
-            try:
-                # Show files in context
-                self.show_files_in_context()
+            # try:
+            # Show files in context
+            self.show_files_in_context()
+            
+            # Get user input with prompt_toolkit
+            if initial_query:
+                user_input = initial_query
+                initial_query = None  # Reset after first use
+            else:
+                # Create a styled input panel title
+                prompt_message = f"{self.current_mode}> "
                 
-                # Get user input with prompt_toolkit
-                if initial_query:
-                    user_input = initial_query
-                    initial_query = None  # Reset after first use
-                else:
-                    # Create a styled input panel title
-                    prompt_message = f"{self.current_mode}> "
-                    
-                    # Display a styled input panel title
-                    self.console.print(f"[{ORANGE_COLOR} bold]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Enter your command or query ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/{ORANGE_COLOR} bold]")
-                    
-                    # Use the prompt_toolkit session with proper styling
-                    user_input = await asyncio.to_thread(
-                        lambda: self.session.prompt(
-                            HTML(f"<b>{prompt_message}</b> "),
-                        )
+                # Display a styled input panel title
+                self.console.print(f"[{ORANGE_COLOR} bold]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Enter your command or query ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/{ORANGE_COLOR} bold]")
+                
+                # Use the prompt_toolkit session with proper styling
+                user_input = await asyncio.to_thread(
+                    lambda: self.session.prompt(
+                        HTML(f"<b>{prompt_message}</b> "),
                     )
+                )
 
-                    # Clear the previous line to make the UI cleaner
-                    self.console.print("")
+                # Clear the previous line to make the UI cleaner
+                self.console.print("")
+            
+            # Handle @ file references
+            if user_input.startswith('@'):
+                file_path = user_input[1:]
+                self.add_file_to_context(file_path)
+                continue
+            
+            # Parse command
+            if user_input.startswith('/'):
+                parts = user_input.split(' ', 1)
+                command = parts[0].lower()
+                args = parts[1] if len(parts) > 1 else ""
                 
-                # Handle @ file references
-                if user_input.startswith('@'):
-                    file_path = user_input[1:]
-                    self.add_file_to_context(file_path)
-                    continue
-                
-                # Parse command
-                if user_input.startswith('/'):
-                    parts = user_input.split(' ', 1)
-                    command = parts[0].lower()
-                    args = parts[1] if len(parts) > 1 else ""
-                    
-                    # Update mode based on command
-                    if command == "/agent":
-                        self.current_mode = "Agent"
-                    elif command == "/chat":
-                        self.current_mode = "Chat"
-                    elif command == "/interactive":
-                        self.current_mode = "Interactive"
-                    
-                    running = await self.process_command(command, args)
-                else:
-                    # Default to autonomous agent if no command specified
+                # Update mode based on command
+                if command == "/agent":
                     self.current_mode = "Agent"
-                    response = await self.agent(user_input)
+                elif command == "/chat":
+                    self.current_mode = "Chat"
+                elif command == "/interactive":
+                    self.current_mode = "Interactive"
+                
+                running = await self.process_command(command, args)
+            else:
+                # Default to autonomous agent if no command specified
+                self.current_mode = "Agent"
+                response = await self.agent(user_input)
+                
+                # Process response to split think and regular content
+                processed_response = self._split_response_with_think(response)
+                
+                # Display the processed response in a panel
+                self.console.print(Panel(
+                    processed_response,
+                    title=f"[{ORANGE_COLOR} bold]Agent Response[/{ORANGE_COLOR} bold]", 
+                    border_style=ORANGE_COLOR, 
+                    expand=True
+                ))
                     
-                    # Process response to split think and regular content
-                    processed_response = self._split_response_with_think(response)
+                self.last_output = response
+                
+                # Display tool results after agent response
+                self.display_tool_results()
                     
-                    # Display the processed response in a panel
-                    self.console.print(Panel(
-                        processed_response,
-                        title=f"[{ORANGE_COLOR} bold]Agent Response[/{ORANGE_COLOR} bold]", 
-                        border_style=ORANGE_COLOR, 
-                        expand=True
-                    ))
-                        
-                    self.last_output = response
-                    
-                    # Display tool results after agent response
-                    self.display_tool_results()
-                    
-            except KeyboardInterrupt:
-                self.console.print("\n[warning]Exiting...[/warning]")
-                running = False
-            except Exception as e:
-                self.console.print(f"[error]Error:[/error] {str(e)}")
+            # except KeyboardInterrupt:
+            #     self.console.print("\n[warning]Exiting...[/warning]")
+            #     running = False
+            # except Exception as e:
+            #     self.console.print(f"[error]Error:[/error] {str(e)}")
         
         self.console.print(f"[{ORANGE_COLOR} bold]Thank you for using OpenCursor![/{ORANGE_COLOR} bold]")
 
