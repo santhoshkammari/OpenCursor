@@ -1,15 +1,33 @@
 # OpenCursor
 
-An AI-powered code agent for workspace operations.
+An AI-powered code agent for workspace operations with a rich terminal UI.
+
+![OpenCursor Logo](https://raw.githubusercontent.com/santhoshkammari/OpenCursor/main/assets/logo.png)
+
+## Overview
+
+OpenCursor is a terminal-based AI coding assistant that helps you navigate, understand, and modify codebases. It provides both autonomous and interactive agent modes, along with direct LLM chat capabilities. The tool uses a variety of AI-powered features to help you work with code more efficiently.
 
 ## Features
 
-- Chat with an AI coding agent in autonomous or interactive mode
-- Direct LLM chat without tools
-- File context management (add, drop, clear)
-- Repository mapping
-- Focus on specific files
-- Workspace directory selection
+### Core Functionality
+- **AI-powered code assistance** with autonomous and interactive modes
+- **Rich terminal UI** with syntax highlighting and markdown support
+- **File context management** to focus on relevant files
+- **Repository exploration** and visualization
+- **Web search integration** for up-to-date information
+- **Code editing and terminal command execution** capabilities
+
+### Agent Modes
+- **Autonomous Mode**: Agent works step-by-step without user interaction
+- **Interactive Mode**: Agent performs one tool call at a time, waiting for user input
+- **Chat Mode**: Direct conversation with the LLM without using tools
+
+### Tools
+- **File Operations**: Read, edit, list, search, and delete files
+- **Code Analysis**: Semantic search, grep search, and code usage analysis
+- **Terminal Operations**: Execute terminal commands
+- **Web Tools**: Search the web and fetch webpage content
 
 ## Installation
 
@@ -19,19 +37,16 @@ An AI-powered code agent for workspace operations.
 pip install -U opencursor
 ```
 
-
-### Using Poetry 
+### Using Poetry
 
 ```bash
 # Clone the repository
 git clone https://github.com/santhoshkammari/OpenCursor.git
-cd opencursor
+cd OpenCursor
 
 # Install with Poetry
 poetry install
 ```
-
-
 
 ## Usage
 
@@ -39,41 +54,54 @@ Once installed, you can use OpenCursor from the command line:
 
 ```bash
 # Basic usage
-opencursor -q "Create a simple Flask app"
+opencursor
 
 # Specify a workspace directory
-opencursor -w /path/to/workspace -q "Fix the bug in app.py"
+opencursor -w /path/to/workspace
 
 # Use a different model
-opencursor -m "gpt-4" -q "Refactor the authentication module"
+opencursor -m "gpt-4"
 
-# Run in interactive mode
-opencursor -i -q "Create a React component"
+# Start with an initial query
+opencursor -q "Create a simple Flask app"
 ```
 
 ### Command-line Options
 
 - `-w, --workspace`: Path to the workspace directory (default: current directory)
-- `-q, --query`: Query to process (required)
+- `-q, --query`: Initial query to process
 - `-m, --model`: LLM model to use (default: qwen3_14b_q6k:latest)
 - `-H, --host`: Ollama API host URL (default: http://192.168.170.76:11434)
-- `-i, --interactive`: Run in interactive mode (one tool call at a time)
+- `--no-thinking`: Disable thinking process in responses
+
+## Commands
+
+OpenCursor provides several commands that you can use within the application:
+
+- `/agent <message>`: Send a message to the agent (autonomous mode)
+- `/interactive <message>`: Send a message to the agent (interactive mode)
+- `/chat <message>`: Chat with the LLM directly (no tools)
+- `/add <filepath>`: Add a file to the chat context
+- `/drop <filepath>`: Remove a file from the chat context
+- `/clear`: Clear all files from the chat context
+- `/repomap`: Show a map of the repository
+- `/focus <filepath>`: Focus on a specific file
+- `/diff <filepath>`: Show git diff for a file with syntax highlighting
+- `/help`: Show help information
+- `/exit`: Exit the application
+
+You can also use shortcuts:
+- `@filepath` to quickly add a file to the context
+
+## Code Block Formats
+
+OpenCursor supports various code block formats for better visualization:
+
+- ```language:filepath
+- ```startLine:endLine:filepath
+- ```language:startLine:endLine:filepath
 
 ## Development
-
-### Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/opencursor.git
-cd opencursor
-
-# Install dependencies
-poetry install
-
-# Run tests
-poetry run pytest
-```
 
 ### Project Structure
 
@@ -81,43 +109,62 @@ poetry run pytest
 opencursor/
 ├── code_agent/
 │   ├── src/
-│   │   ├── agent.py      # Main agent implementation
-│   │   ├── llm.py        # LLM client
-│   │   ├── prompts.py    # System prompts
-│   │   ├── tools.py      # Tool implementations
-│   │   └── ...
-│   ├── cli.py            # Command-line interface
+│   │   ├── app.py         # Main application with UI
+│   │   ├── agent.py       # Agent implementation
+│   │   ├── llm.py         # LLM client
+│   │   ├── tools.py       # Tool implementations
+│   │   ├── prompts.py     # System prompts
+│   │   ├── tool_playwright.py  # Web search tools
+│   │   └── tool_browser.py     # Browser tools
+│   ├── cli_entry.py       # CLI entry point
 │   └── __init__.py
-├── tests/
-├── pyproject.toml
+├── pyproject.toml         # Poetry configuration
+├── requirements.txt       # Dependencies
 └── README.md
 ```
+
+### Core Components
+
+1. **OpenCursorApp**: Main application class that handles the UI and command processing
+2. **CodeAgent**: Handles autonomous and interactive modes, manages tool execution
+3. **LLMClient**: Interacts with the Ollama API, manages conversation history
+4. **Tools**: Implements various tools for file operations, code analysis, etc.
+
+### Setting Up Development Environment
+
+```bash
+# Clone the repository
+git clone https://github.com/santhoshkammari/OpenCursor.git
+cd OpenCursor
+
+# Install dependencies
+pip install -e .
+# or with poetry
+poetry install
+
+# Run the application
+python -m code_agent.cli_entry
+```
+
+## Dependencies
+
+- Python 3.11+
+- Rich: Terminal UI and formatting
+- Ollama: LLM API client
+- Prompt_toolkit: Command completion and input handling
+- Playwright: Web search functionality
+- SentenceTransformer: Semantic code search
 
 ## License
 
 MIT
 
-### UI Components
+## Contributing
 
-- **Chat History**: Shows the conversation between you and the AI
-- **Message Input**: Type your messages here
-- **Tool Selection**: Choose which tool to use for processing your message
-- **Workspace Path**: Set the directory to work with
-- **Context Information**: Shows which files are currently in context
-- **Update Context**: Refreshes the context information
-- **Clear Chat**: Clears the chat history
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-### Available Tools
-
-- **agent (autonomous)**: Agent works step-by-step without user interaction
-- **agent (interactive)**: Agent performs one tool call at a time, waiting for user input
-- **chat (LLM only)**: Chat with the LLM directly without using tools
-- **add file**: Add a file to the context (provide file path in message)
-- **drop file**: Remove a file from the context (provide file path in message)
-- **clear context**: Remove all files from the context
-- **repo map**: Show the files in the current workspace
-- **focus on file**: Add a file to context and show its contents
-
-## Customization
-
-You can modify the model and host settings in the `main()` function of `gradio_ui.py`.
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request

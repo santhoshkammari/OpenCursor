@@ -1,0 +1,122 @@
+# OpenCursor Codebase Understanding
+
+## Initial Analysis
+- The main file is `code_agent/src/app.py`
+- It appears to be a terminal-based code assistant powered by AI
+- Uses Rich library for terminal UI
+- Has both agent mode and chat mode functionality
+- Supports file context management
+
+## Project Structure
+- Root directory contains configuration files and scripts
+- `code_agent/` is the main package directory
+- `code_agent/src/` contains the core implementation files
+- `code_agent/cli_entry.py` serves as the entry point for the CLI tool
+
+## Core Components
+1. **app.py (48KB, 1127 lines)**
+   - Main application with UI implementation
+   - Uses Rich library for terminal UI
+   - Implements the OpenCursorApp class with various commands
+   - Handles command completion and file completion
+   - Formats and displays tool results
+
+2. **agent.py (8.5KB, 196 lines)**
+   - Implements the CodeAgent class
+   - Handles autonomous and interactive modes
+   - Manages tool execution and LLM interactions
+
+3. **llm.py (2.8KB, 85 lines)**
+   - LLMClient class for interacting with Ollama API
+   - Manages conversation history
+   - Handles sending messages to the LLM and processing responses
+
+4. **tools.py (60KB, 1205 lines)**
+   - Implements various tools for the agent to use
+   - File operations, code search, terminal commands, etc.
+   - Tools are registered with the agent for use
+
+5. **prompts.py (21KB, 136 lines)**
+   - Contains system prompts for the agent
+   - Includes autonomous and interactive agent prompts
+   - Defines tool descriptions and parameters
+
+6. **tool_playwright.py (9.8KB, 256 lines)**
+   - Implements web search functionality using Playwright
+   - Provides browser automation capabilities
+   - Supports searching on Bing and DuckDuckGo
+
+## UI Components
+1. **OpenCursorApp Class**
+   - Main application class that handles the UI
+   - Uses Rich library for terminal UI
+   - Implements command processing and tool result display
+
+2. **Command Handling**
+   - `/agent`: Send a message to the agent (autonomous mode)
+   - `/interactive`: Send a message to the agent (interactive mode)
+   - `/chat`: Chat with the LLM directly (no tools)
+   - `/add`: Add a file to the chat context
+   - `/drop`: Remove a file from the chat context
+   - `/clear`: Clear all files from the chat context
+   - `/repomap`: Show a map of the repository
+   - `/focus`: Focus on a specific file
+   - `/diff`: Show git diff for a file with syntax highlighting
+   - `/help`: Show help information
+   - `/exit`: Exit the application
+
+3. **Auto-completion**
+   - CommandCompleter: Provides completion for commands
+   - FileCompleter: Provides completion for file paths
+   - OpenCursorCompleter: Combined completer for both commands and files
+
+4. **Display Formatting**
+   - Rich panels for displaying information
+   - Syntax highlighting for code
+   - Markdown rendering for responses
+   - Custom formatting for tool results
+   - Table-based display for search results
+
+## Available Tools
+1. **File Operations**
+   - `read_file`: Read contents of a file
+   - `edit_file`: Edit or create a file
+   - `list_dir`: List contents of a directory
+   - `file_search`: Search for files by name
+   - `delete_file`: Delete a file
+   - `search_replace`: Replace text in a file
+
+2. **Code Analysis**
+   - `grep_search`: Search for text patterns in files
+   - `codebase_search`: Semantic search for code snippets
+   - `list_code_usages`: Find usages of a symbol
+   - `diff_history`: Show recent changes to files
+
+3. **Terminal Operations**
+   - `run_terminal_cmd`: Run a terminal command
+
+4. **Web Tools**
+   - `web_search`: Search the web using Playwright
+   - `fetch_webpage`: Fetch content from a webpage
+
+5. **Other Tools**
+   - `reapply`: Reapply an edit to a file
+   - Basic math operations
+
+## Configuration
+- Uses Poetry for package management
+- Project version is 0.0.15
+- Requires Python 3.11+
+- Dependencies include openai, playwright, asyncio, and pytest
+
+## Functionality
+- Terminal-based UI with Rich library
+- Supports autonomous and interactive agent modes
+- Direct LLM chat without tools
+- File context management (add, drop, clear)
+- Repository mapping
+- File focusing
+- Web search capabilities
+- Code editing and terminal command execution
+- Syntax highlighting for code display
+- Auto-completion for commands and file paths 
