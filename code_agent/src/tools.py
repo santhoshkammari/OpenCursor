@@ -256,23 +256,30 @@ class Tools:
             except Exception as e:
                 return f"Error reading file: {str(e)}"
         
-        def edit_file(target_file: str, code_edit: str, instructions: str = "") -> str:
+        def python_edit_file(target_file: str, code_edit: str, instructions: str = "") -> str:
             """
-            Use this tool to propose an edit to an existing file.
+            USE THIS TOOL FOR PYTHON FILES ONLY!
+            
+            Use this tool to propose an edit to an existing Python file or create a new Python file.
             This will be read by a less intelligent model which will quickly apply the edit. You should make it clear what the edit is, while also minimizing the unchanged code you write.
-            When writing the edit, you should specify each edit in sequence, with the special comment // ... existing code ... to represent unchanged code in between edited lines.
+            When writing the edit, you should specify each edit in sequence, with the special comment # ... existing code ... to represent unchanged code in between edited lines.
+            
             For example:
-            // ... existing code ...
+            # ... existing code ...
             FIRST_EDIT
-            // ... existing code ...
+            # ... existing code ...
             SECOND_EDIT
-            // ... existing code ...
+            # ... existing code ...
             THIRD_EDIT
-            // ... existing code ...
+            # ... existing code ...
+            
             You should still bias towards repeating as few lines of the original file as possible to convey the change.
             But, each edit should contain sufficient context of unchanged lines around the code you're editing to resolve ambiguity.
-            DO NOT omit spans of pre-existing code (or comments) without using the // ... existing code ... comment to indicate its absence. If you omit the existing code comment, the model may inadvertently delete these lines.
+            DO NOT omit spans of pre-existing code (or comments) without using the # ... existing code ... comment to indicate its absence. If you omit the existing code comment, the model may inadvertently delete these lines.
             Make sure it is clear what the edit should be, and where it should be applied.
+            
+            For non-Python files (like .md, .txt, .sh, etc.), use text_file_edit instead.
+            
             You should specify the following arguments before the others: [target_file]
             """
             file_path = os.path.join(self.workspace_root, target_file) if not os.path.isabs(target_file) else target_file
@@ -472,7 +479,7 @@ class Tools:
         
         # Register file tools
         self.register_function(read_file)
-        self.register_function(edit_file)
+        self.register_function(python_edit_file)
         self.register_function(list_dir)
         
         def file_search(query: str, explanation: str = "") -> str:
@@ -628,9 +635,11 @@ class Tools:
             except Exception as e:
                 return f"Error performing search and replace: {str(e)}"
         
-        def file_str_replace(file: str, old_str: str, new_str: str, sudo: bool = False) -> str:
+        def text_file_edit(file: str, old_str: str, new_str: str, sudo: bool = False) -> str:
             """
-            Replace specified string in a non-Python file (like .md, .txt, .sh files). Use for updating specific content in text-based files or fixing errors in code.
+            USE THIS TOOL FOR TEXT-BASED FILES ONLY (.md, .txt, .sh, .json, .yaml, etc.)!
+            
+            Replace specified string in a non-Python text file. Use for updating content in text-based files or fixing errors in non-Python code.
             
             Args:
                 file (str): Path of the file to perform replacement on
@@ -650,7 +659,7 @@ class Tools:
                 
                 # Check if file is a Python file (this tool is for non-Python files)
                 if file_path.endswith('.py'):
-                    return f"Error: This tool is intended for non-Python files like .md, .txt, .sh. For Python files, use search_replace instead."
+                    return f"Error: This tool is intended for non-Python files like .md, .txt, .sh. For Python files, use python_edit_file instead."
                 
                 # Check file extension to ensure it's a text file
                 allowed_extensions = ['.md', '.txt', '.sh', '.bash', '.json', '.yml', '.yaml', '.html', '.css', '.js', '.jsx', '.ts', '.tsx', '.xml', '.csv']
@@ -731,12 +740,11 @@ class Tools:
         
         # Register file operation tools
         self.register_function(read_file)
-        self.register_function(edit_file)
         self.register_function(list_dir)
         self.register_function(file_search)
         self.register_function(delete_file)
         self.register_function(search_replace)
-        self.register_function(file_str_replace)
+        self.register_function(text_file_edit)
 
     def register_terminal_tools(self):
         """Register terminal command execution tools."""

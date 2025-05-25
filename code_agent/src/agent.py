@@ -23,7 +23,7 @@ class CodeAgent:
         self.llm_client = LLMClient(model_name=model_name, host=host)
         self.tools_manager = Tools(workspace_root=workspace_root)
         self.register_tools()
-        self.max_iterations = 25
+        self.max_iterations = 100
         self.model_name = model_name
         self.custom_system_prompt = system_prompt
 
@@ -149,7 +149,6 @@ class CodeAgent:
                         print(f"Semantic search for: {query}")
                     elif name == 'run_terminal_cmd':
                         cmd = args.get('command', '')
-                        print(f"Running command: {cmd}")
                     elif name == 'web_search':
                         search_term = args.get('search_term', '')
                         print(f"Searching web for: {search_term}")
