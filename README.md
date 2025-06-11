@@ -20,6 +20,12 @@ OpenCursor is a terminal-based AI coding assistant that helps you navigate, unde
 
 🔍 **Transparent UI** - See exactly what the model is doing
 
+🎨 **Nostalgic UI** - Classic terminal aesthetics with modern functionality
+
+⚡ **Context-Aware** - Configurable context window for optimal performance
+
+📊 **Streaming Responses** - Real-time model output with tool feedback display
+
 ## Example Queries
 
 - "Create a simple Flask API with user authentication"
