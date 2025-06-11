@@ -1,6 +1,9 @@
 import asyncio
 from typing import Dict, Any, List, Tuple, Optional
-
+from rich.console import Console
+from rich.text import Text
+from rich.style import Style
+import time
 
 from .llm import LLMClient
 from .tools import Tools
@@ -10,7 +13,7 @@ from .tool_playwright import register_playwright_search_tool
 
 
 class CodeAgent:
-    def __init__(self, model_name: str = "qwen3_14b_q6k:latest", host: str = "http://192.168.170.76:11434", workspace_root: str = None, system_prompt: Optional[str] = None, num_ctx: int = 2048):
+    def __init__(self, model_name: str = "qwen3_14b_q6k:latest", host: str = "http://192.168.170.76:11434", workspace_root: str = None, system_prompt: Optional[str] = None, num_ctx: int = 2048, no_think: bool = True):
         """
         Initialize a CodeAgent that can use tools and execute tool calls.
 
@@ -20,13 +23,39 @@ class CodeAgent:
             workspace_root (str): The root directory of the workspace.
             system_prompt (Optional[str]): Optional custom system prompt to use.
             num_ctx (int): Context window size for the model.
+            no_think (bool): Whether to use no-thinking mode (adds /no_think tag). Default is True.
         """
-        self.llm_client = LLMClient(model_name=model_name, host=host, num_ctx=num_ctx)
+        self.llm_client = LLMClient(model_name=model_name, host=host, num_ctx=num_ctx, no_think=no_think)
         self.tools_manager = Tools(workspace_root=workspace_root)
         self.register_tools()
         self.max_iterations = 100
         self.model_name = model_name
         self.custom_system_prompt = system_prompt
+        
+        # Initialize nostalgic console for tool displays
+        self.console = Console()
+        
+        # Nostalgic tool icons and symbols
+        self.tool_icons = {
+            'read_file': '📂',
+            'list_dir': '📁', 
+            'edit_file': '✏️',
+            'grep_search': '🔍',
+            'file_search': '🗂️',
+            'codebase_search': '🔎',
+            'run_terminal_cmd': '⚡',
+            'web_search': '🌐',
+            'default': '⚙️'
+        }
+        
+        # Retro ASCII symbols for different states
+        self.retro_symbols = {
+            'working': '▓▓▒▒░░',
+            'complete': '███',
+            'error': '▄▄▄',
+            'dots': ['◐', '◓', '◑', '◒'],
+            'loading': ['|', '/', '-', '\\'],
+        }
 
     def register_tools(self):
         """Register all available tools."""
@@ -120,41 +149,16 @@ class CodeAgent:
             
             # Process tool calls if any
             if response.message.tool_calls:
-                # Process each tool call and show real-time feedback
+                # Process each tool call and show nostalgic feedback
                 for tc in response.message.tool_calls:
                     name = tc['function']['name']
                     args = tc['function']['arguments']
                     
-                    # Display explanation if available
-                    if 'explanation' in args and args['explanation']:
-                        print(f"{args['explanation']}...")
+                    # Display nostalgic tool call indicator
+                    self._show_nostalgic_tool_call(name, args)
                     
-                    # Display what tool is being used with relevant info
-                    if name == 'read_file':
-                        target_file = args.get('target_file', '')
-                        print(f"Reading file: {target_file}")
-                    elif name == 'list_dir':
-                        path = args.get('relative_workspace_path', '')
-                        print(f"Listing directory: {path}")
-                    elif name == 'edit_file':
-                        target_file = args.get('target_file', '')
-                        print(f"Editing file: {target_file}")
-                    elif name == 'grep_search':
-                        query = args.get('query', '')
-                        print(f"Searching code for: {query}")
-                    elif name == 'file_search':
-                        query = args.get('query', '')
-                        print(f"Finding files matching: {query}")
-                    elif name == 'codebase_search':
-                        query = args.get('query', '')
-                        print(f"Semantic search for: {query}")
-                    elif name == 'run_terminal_cmd':
-                        cmd = args.get('command', '')
-                    elif name == 'web_search':
-                        search_term = args.get('search_term', '')
-                        print(f"Searching web for: {search_term}")
-                    else:
-                        print(f"Using {name}...")
+                    # Brief nostalgic pause for that retro feel
+                    time.sleep(0.1)
                     
                     # Log for execution summary
                     tool_info = f"{name}"
@@ -194,3 +198,60 @@ class CodeAgent:
         # If we reach here, we've hit the iteration limit
         execution_summary = "\n".join(execution_log)
         return f"I've reached the maximum number of steps ({self.max_iterations}) without completing the task. Here's what I've done so far:\n\n[Execution Summary]\n{execution_summary}"
+    
+    def _show_nostalgic_tool_call(self, tool_name: str, args: dict):
+        """Display nostalgic tool call with retro styling"""
+        # Get the appropriate icon
+        icon = self.tool_icons.get(tool_name, self.tool_icons['default'])
+        
+        # Create nostalgic styled text
+        tool_text = Text()
+        tool_text.append("• ", style="#FFB000")  # Amber bullet
+        tool_text.append(f"{icon} ", style="#00FFFF")  # Cyan icon
+        
+        # Format tool-specific messages with retro style
+        if tool_name == 'read_file':
+            target_file = args.get('target_file', '')
+            tool_text.append("READING FILE: ", style="#00FF41 bold")
+            tool_text.append(f"{target_file}", style="#F0F0F0")
+        elif tool_name == 'list_dir':
+            path = args.get('relative_workspace_path', '')
+            tool_text.append("LISTING DIR: ", style="#00FF41 bold")
+            tool_text.append(f"{path}", style="#F0F0F0")
+        elif tool_name == 'edit_file':
+            target_file = args.get('target_file', '')
+            tool_text.append("EDITING FILE: ", style="#00FF41 bold")
+            tool_text.append(f"{target_file}", style="#F0F0F0")
+        elif tool_name == 'grep_search':
+            query = args.get('query', '')
+            tool_text.append("CODE SEARCH: ", style="#00FF41 bold")
+            tool_text.append(f"{query}", style="#F0F0F0")
+        elif tool_name == 'file_search':
+            query = args.get('query', '')
+            tool_text.append("FILE SEARCH: ", style="#00FF41 bold")
+            tool_text.append(f"{query}", style="#F0F0F0")
+        elif tool_name == 'codebase_search':
+            query = args.get('query', '')
+            tool_text.append("SEMANTIC SEARCH: ", style="#00FF41 bold")
+            tool_text.append(f"{query}", style="#F0F0F0")
+        elif tool_name == 'run_terminal_cmd':
+            cmd = args.get('command', '')
+            tool_text.append("TERMINAL CMD: ", style="#00FF41 bold")
+            tool_text.append(f"{cmd}", style="#F0F0F0")
+        elif tool_name == 'web_search':
+            search_term = args.get('search_term', '')
+            tool_text.append("WEB SEARCH: ", style="#00FF41 bold")
+            tool_text.append(f"{search_term}", style="#F0F0F0")
+        else:
+            tool_text.append(f"USING {tool_name.upper()}", style="#00FF41 bold")
+        
+        # Add explanation if available
+        if 'explanation' in args and args['explanation']:
+            tool_text.append(f" >> {args['explanation']}", style="#FFB000 dim")
+        
+        # Add retro loading dots
+        tool_text.append(" ", style="")
+        for dot in self.retro_symbols['dots'][:2]:
+            tool_text.append(dot, style="#00FFFF dim")
+        
+        self.console.print(tool_text)

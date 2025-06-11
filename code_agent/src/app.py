@@ -73,8 +73,16 @@ OPENCURSOR_LOGO = """
  ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═╝
 """
 
-# Custom orange theme color
-ORANGE_COLOR = "#FF8C69"
+# Claude-inspired theme colors
+CLAUDE_PRIMARY = "#E67E50"    # Warm coral/orange from Claude branding
+CLAUDE_SECONDARY = "#D4A574"  # Warm beige/tan
+CLAUDE_ACCENT = "#B8956A"     # Deeper warm tone
+CLAUDE_SUCCESS = "#7B9E3F"    # Natural green
+CLAUDE_INFO = "#5B8AA6"       # Calm blue
+CLAUDE_WARNING = "#D49C3D"    # Warm amber
+CLAUDE_ERROR = "#C85450"      # Warm red
+CLAUDE_TEXT = "#2C2B29"       # Warm dark text
+CLAUDE_BACKGROUND = "#F5F5F2" # Warm off-white background
 
 # Custom completers for OpenCursor
 class CommandCompleter(Completer):
@@ -194,7 +202,7 @@ class OpenCursorCompleter(Completer):
             )
 
 class OpenCursorApp:
-    def __init__(self, model_name: str = "qwen3_14b_q6k:latest", host: str = "http://192.168.170.76:11434", workspace_path: Optional[str] = None, system_prompt: Optional[str] = None, num_ctx: int = 2048):
+    def __init__(self, model_name: str = "qwen3_14b_q6k:latest", host: str = "http://192.168.170.76:11434", workspace_path: Optional[str] = None, system_prompt: Optional[str] = None, num_ctx: int = 2048, no_think: bool = True):
         # Use provided workspace path or current working directory
         self.current_workspace = Path(workspace_path).resolve() if workspace_path else Path.cwd()
         
@@ -202,25 +210,30 @@ class OpenCursorApp:
         logging.getLogger().setLevel(logging.WARNING)
         
         # Initialize agent with current workspace
-        self.agent = CodeAgent(model_name=model_name, host=host, workspace_root=str(self.current_workspace), system_prompt=system_prompt, num_ctx=num_ctx)
+        self.agent = CodeAgent(model_name=model_name, host=host, workspace_root=str(self.current_workspace), system_prompt=system_prompt, num_ctx=num_ctx, no_think=no_think)
         
-        # Create custom theme with orange accent color
+        # Create Claude-inspired theme
         custom_theme = Theme({
-            "info": RichStyle(color="cyan"),
-            "warning": RichStyle(color="yellow"),
-            "error": RichStyle(color="red"),
-            "success": RichStyle(color="green"),
-            "orange": RichStyle(color=ORANGE_COLOR),
-            "orange.border": RichStyle(color=ORANGE_COLOR),
-            "orange.title": RichStyle(color=ORANGE_COLOR, bold=True),
+            "info": RichStyle(color=CLAUDE_INFO),
+            "warning": RichStyle(color=CLAUDE_WARNING),
+            "error": RichStyle(color=CLAUDE_ERROR),
+            "success": RichStyle(color=CLAUDE_SUCCESS),
+            "primary": RichStyle(color=CLAUDE_PRIMARY),
+            "primary.border": RichStyle(color=CLAUDE_PRIMARY),
+            "primary.title": RichStyle(color=CLAUDE_PRIMARY, bold=True),
+            "claude.thinking": RichStyle(color=CLAUDE_ACCENT, dim=True),
+            "claude.streaming": RichStyle(color=CLAUDE_SUCCESS),
+            "claude.tool": RichStyle(color=CLAUDE_WARNING),
+            "claude.border": RichStyle(color=CLAUDE_SECONDARY),
+            "claude.text": RichStyle(color=CLAUDE_TEXT),
         })
         
         # Initialize console with custom theme and full width
         self.console = Console(theme=custom_theme, width=None)
         
-        # Create custom box styles
-        self.orange_box_rounded = box.ROUNDED
-        self.orange_box_simple = box.SIMPLE
+        # Create custom box styles for Claude aesthetic
+        self.claude_box_rounded = box.ROUNDED
+        self.claude_box_simple = box.SIMPLE
         
         # Chat context management
         self.files_in_context: Set[Path] = set()
@@ -239,11 +252,13 @@ class OpenCursorApp:
         # Current mode (default is "OpenCursor")
         self.current_mode = "Agent"
         
-        # Define prompt styles
+        # Define Claude-inspired prompt styles
         self.style = Style.from_dict({
-            'command': '#00FFFF bold',  # Cyan for commands
-            'file': '#00FF00',          # Green for files
-            'prompt': '#FFFFFF bold',   # White bold for prompt
+            'command': f'{CLAUDE_PRIMARY} bold',     # Claude primary for commands
+            'file': f'{CLAUDE_SUCCESS}',             # Natural green for files
+            'prompt': f'{CLAUDE_WARNING} bold',      # Warm amber for prompt
+            'ansigreen': f'{CLAUDE_SUCCESS} bold',   # Natural green bold
+            'text': f'{CLAUDE_TEXT}',                # Warm dark text
         })
         
         # Create key bindings
@@ -288,13 +303,13 @@ class OpenCursorApp:
 
     def print_logo(self):
         """Print the OpenCursor logo"""
-        self.console.print(f"[{ORANGE_COLOR}]{OPENCURSOR_LOGO}[/{ORANGE_COLOR}]")
+        self.console.print(f"[{CLAUDE_PRIMARY}]{OPENCURSOR_LOGO}[/{CLAUDE_PRIMARY}]")
         
     def print_help(self):
         """Print help information"""
-        table = Table(title=f"[{ORANGE_COLOR} bold]OpenCursor Commands[/{ORANGE_COLOR} bold]", box=box.ROUNDED, border_style=ORANGE_COLOR)
-        table.add_column("Command", style="cyan")
-        table.add_column("Description", style="green")
+        table = Table(title=f"[{CLAUDE_PRIMARY} bold]OpenCursor Commands[/{CLAUDE_PRIMARY} bold]", box=box.ROUNDED, border_style=CLAUDE_PRIMARY)
+        table.add_column("Command", style="primary")
+        table.add_column("Description", style="claude.text")
         
         table.add_row("/agent <message>", "Send a message to the agent (autonomous mode)")
         table.add_row("/interactive <message>", "Send a message to the agent (interactive mode)")
@@ -311,9 +326,9 @@ class OpenCursorApp:
         self.console.print(table)
         
         # Add information about agent modes
-        agent_modes = Table(title=f"[{ORANGE_COLOR} bold]Agent Modes[/{ORANGE_COLOR} bold]", box=box.ROUNDED, border_style=ORANGE_COLOR)
-        agent_modes.add_column("Mode", style="cyan")
-        agent_modes.add_column("Description", style="green")
+        agent_modes = Table(title=f"[{CLAUDE_PRIMARY} bold]Agent Modes[/{CLAUDE_PRIMARY} bold]", box=box.ROUNDED, border_style=CLAUDE_PRIMARY)
+        agent_modes.add_column("Mode", style="primary")
+        agent_modes.add_column("Description", style="claude.text")
         
         agent_modes.add_row("Autonomous (default)", "Agent works step-by-step without user interaction")
         agent_modes.add_row("Interactive", "Agent performs one tool call at a time, waiting for user input")
@@ -321,9 +336,9 @@ class OpenCursorApp:
         self.console.print(agent_modes)
         
         # Add information about code block format
-        code_formats = Table(title=f"[{ORANGE_COLOR} bold]Code Block Formats[/{ORANGE_COLOR} bold]", box=box.ROUNDED, border_style=ORANGE_COLOR)
-        code_formats.add_column("Format", style="cyan")
-        code_formats.add_column("Description", style="green")
+        code_formats = Table(title=f"[{CLAUDE_PRIMARY} bold]Code Block Formats[/{CLAUDE_PRIMARY} bold]", box=box.ROUNDED, border_style=CLAUDE_PRIMARY)
+        code_formats.add_column("Format", style="primary")
+        code_formats.add_column("Description", style="claude.text")
         
         code_formats.add_row("```language:filepath", "Code with syntax highlighting for language and file path")
         code_formats.add_row("```startLine:endLine:filepath", "Code with line numbers and file path")
@@ -337,16 +352,16 @@ class OpenCursorApp:
             # Create an empty panel instead of text message
             empty_panel = Panel(
                 "No files in context yet. Use [bold]@filename[/bold] or [bold]/add filename[/bold] to add files.",
-                title=f"[{ORANGE_COLOR} bold]Files in Context[/{ORANGE_COLOR} bold]",
-                border_style=ORANGE_COLOR,
+                title=f"[{CLAUDE_PRIMARY} bold]Files in Context[/{CLAUDE_PRIMARY} bold]",
+                border_style=CLAUDE_PRIMARY,
                 box=box.ROUNDED
             )
             self.console.print(empty_panel)
             return
             
         # Create a table for files in context
-        table = Table(box=box.SIMPLE, border_style=ORANGE_COLOR)
-        table.add_column("File", style="green")
+        table = Table(box=box.SIMPLE, border_style=CLAUDE_PRIMARY)
+        table.add_column("File", style="success")
         
         for file_path in sorted(self.files_in_context):
             table.add_row(str(file_path.relative_to(self.current_workspace)))
@@ -354,8 +369,8 @@ class OpenCursorApp:
         # Wrap the table in a panel
         files_panel = Panel(
             table,
-            title=f"[{ORANGE_COLOR} bold]Files in Context[/{ORANGE_COLOR} bold]",
-            border_style=ORANGE_COLOR,
+            title=f"[{CLAUDE_PRIMARY} bold]Files in Context[/{CLAUDE_PRIMARY} bold]",
+            border_style=CLAUDE_PRIMARY,
             box=box.ROUNDED
         )
         self.console.print(files_panel)
@@ -430,9 +445,9 @@ class OpenCursorApp:
             return
             
         # Create a panel to display tool results
-        table = Table(box=box.ROUNDED, title=f"[{ORANGE_COLOR} bold]Recent Tool Results[/{ORANGE_COLOR} bold]", expand=True, border_style=ORANGE_COLOR)
-        table.add_column("Tool", style="cyan")
-        table.add_column("Result", style="white")
+        table = Table(box=box.ROUNDED, title=f"[{CLAUDE_PRIMARY} bold]Recent Tool Results[/{CLAUDE_PRIMARY} bold]", expand=True, border_style=CLAUDE_PRIMARY)
+        table.add_column("Tool", style="primary")
+        table.add_column("Result", style="claude.text")
         
         for tool_name, result in self.tool_results[-5:]:  # Show last 5 results
             # Format the result based on tool type
@@ -462,8 +477,8 @@ class OpenCursorApp:
         if hasattr(self, 'execution_summary') and self.execution_summary:
             summary_panel = Panel(
                 Markdown(self.execution_summary),
-                title=f"[{ORANGE_COLOR} bold]Execution Summary[/{ORANGE_COLOR} bold]",
-                border_style=ORANGE_COLOR,
+                title=f"[{CLAUDE_PRIMARY} bold]Execution Summary[/{CLAUDE_PRIMARY} bold]",
+                border_style=CLAUDE_PRIMARY,
                 box=box.ROUNDED
             )
             
@@ -517,11 +532,11 @@ class OpenCursorApp:
         # Create a table for search results
         from rich.table import Table
         
-        table = Table(box=box.ROUNDED,title=f"[bold]Search results for: {search_term}[/bold]", expand=True, border_style=ORANGE_COLOR)
+        table = Table(box=box.ROUNDED,title=f"[bold]Search results for: {search_term}[/bold]", expand=True, border_style=CLAUDE_PRIMARY)
 
-        table.add_column("#", style="cyan", no_wrap=True)
-        table.add_column("Title", style="green")
-        table.add_column("Description", style="yellow")
+        table.add_column("#", style="info", no_wrap=True)
+        table.add_column("Title", style="success")
+        table.add_column("Description", style="warning")
         
         # Add rows to the table
         for match in matches:
@@ -550,14 +565,14 @@ class OpenCursorApp:
         location_info = f"{start_line}"
         if end_line:
             location_info += f":{end_line}"
-        title = f"[{ORANGE_COLOR} bold]File: {file_path} (Lines {location_info})[/{ORANGE_COLOR} bold]"
+        title = f"[{CLAUDE_PRIMARY} bold]File: {file_path} (Lines {location_info})[/{CLAUDE_PRIMARY} bold]"
         
         # Create syntax object with highlighting
         syntax = Syntax(content, extension or "text", theme="monokai", line_numbers=True, 
                         start_line=start_line, highlight_lines=set(range(start_line, (end_line or start_line) + 1)))
         
         # Display in a panel
-        self.console.print(Panel(syntax, title=title, border_style=ORANGE_COLOR, expand=True))
+        self.console.print(Panel(syntax, title=title, border_style=CLAUDE_PRIMARY, expand=True))
         
     def _format_code_blocks(self, result: str) -> str:
         """Format code blocks with syntax highlighting and file location information"""
@@ -642,8 +657,8 @@ class OpenCursorApp:
                         
                     panel = Panel(
                         syntax,
-                        title=f"[{ORANGE_COLOR} bold]File: {file_path} (Lines {location_info})[/{ORANGE_COLOR} bold]",
-                        border_style=ORANGE_COLOR
+                        title=f"[{CLAUDE_PRIMARY} bold]File: {file_path} (Lines {location_info})[/{CLAUDE_PRIMARY} bold]",
+                        border_style=CLAUDE_PRIMARY
                     )
                     formatted_parts.append(panel)
                 else:
@@ -663,11 +678,11 @@ class OpenCursorApp:
             # Extract regular response (everything after </think>)
             regular_response = response[think_end + len("</think>"):].strip()
             
-            # Create nested panels
+            # Create Claude-inspired thinking panel with warm styling
             think_panel = Panel(
                 Markdown(think_content),  # Use Markdown for better formatting
-                title=f"[{ORANGE_COLOR} bold]Thinking Process[/{ORANGE_COLOR} bold]",
-                border_style=ORANGE_COLOR,
+                title=f"[{CLAUDE_ACCENT} bold]⚡ THINKING PROCESS ⚡[/{CLAUDE_ACCENT} bold]",
+                border_style=CLAUDE_ACCENT,
                 box=box.ROUNDED
             )
             
@@ -678,11 +693,11 @@ class OpenCursorApp:
                 self.execution_summary = regular_response[summary_start:].strip()
                 regular_response = regular_response[:summary_start].strip()
             
-            # Create response panel
+            # Create Claude-inspired response panel
             response_panel = Panel(
                 Markdown(regular_response),  # Use Markdown for better formatting
-                border_style=ORANGE_COLOR,
-                title=f"[{ORANGE_COLOR} bold]Response[/{ORANGE_COLOR} bold]",
+                border_style=CLAUDE_INFO,
+                title=f"[{CLAUDE_INFO} bold]✨ RESPONSE ✨[/{CLAUDE_INFO} bold]",
                 box=box.ROUNDED
             )
             
@@ -728,7 +743,7 @@ class OpenCursorApp:
     
     def generate_repo_map(self):
         """Generate a map of the repository"""
-        self.console.print(f"[{ORANGE_COLOR} bold]REPOSITORY MAP:[/{ORANGE_COLOR} bold]")
+        self.console.print(f"[{CLAUDE_PRIMARY} bold]REPOSITORY MAP:[/{CLAUDE_PRIMARY} bold]")
         
         # Get all files in the current directory recursively
         all_files = []
@@ -741,9 +756,9 @@ class OpenCursorApp:
                     all_files.append(rel_path)
         
         # Sort and format files
-        table = Table(box=box.SIMPLE, expand=True, border_style=ORANGE_COLOR)
-        table.add_column("File", style="green")
-        table.add_column("Status", style="cyan")
+        table = Table(box=box.SIMPLE, expand=True, border_style=CLAUDE_PRIMARY)
+        table.add_column("File", style="success")
+        table.add_column("Status", style="info")
         
         for file in sorted(all_files):
             if any(Path(file).resolve() == f for f in self.files_in_context):
@@ -802,8 +817,8 @@ class OpenCursorApp:
                 syntax = Syntax(diff_text, "diff", theme="monokai", line_numbers=True)
                 self.console.print(Panel(
                     syntax,
-                    title=f"[{ORANGE_COLOR} bold]Git Diff: {file_path}[/{ORANGE_COLOR} bold]",
-                    border_style=ORANGE_COLOR,
+                    title=f"[{CLAUDE_PRIMARY} bold]Git Diff: {file_path}[/{CLAUDE_PRIMARY} bold]",
+                    border_style=CLAUDE_PRIMARY,
                     expand=True
                 ))
                 
@@ -826,18 +841,19 @@ class OpenCursorApp:
             # Process response to split think and regular content
             processed_response = self._split_response_with_think(response)
             
-            # Display the processed response in a panel
+            # Display tool results first
+            self.display_tool_results()
+            
+            # Display the processed response in a Claude-style panel
             self.console.print(Panel(
                 processed_response,
-                title=f"[{ORANGE_COLOR} bold]Agent Response[/{ORANGE_COLOR} bold]", 
-                border_style=ORANGE_COLOR, 
-                expand=True
+                title=f"[{CLAUDE_SUCCESS} bold]🤖 AGENT RESPONSE 🤖[/{CLAUDE_SUCCESS} bold]", 
+                border_style=CLAUDE_SUCCESS, 
+                expand=True,
+                box=box.ROUNDED
             ))
                 
             self.last_output = response
-            
-            # Display tool results after agent response
-            self.display_tool_results()
         elif command == "/interactive":
             self.console.print("[info]Interactive mode...[/info]")
             # Interactive mode with the agent
@@ -846,23 +862,24 @@ class OpenCursorApp:
             # Process response to split think and regular content
             processed_response = self._split_response_with_think(response)
             
-            # Display the processed response in a panel
+            # Display tool results first
+            self.display_tool_results()
+            
+            # Display the processed response in a Claude-style panel
             self.console.print(Panel(
                 processed_response,
-                title=f"[{ORANGE_COLOR} bold]Interactive Response[/{ORANGE_COLOR} bold]", 
-                border_style=ORANGE_COLOR, 
-                expand=True
+                title=f"[{CLAUDE_WARNING} bold]⚡ INTERACTIVE RESPONSE ⚡[/{CLAUDE_WARNING} bold]", 
+                border_style=CLAUDE_WARNING, 
+                expand=True,
+                box=box.ROUNDED
             ))
                 
             self.last_output = response
-            
-            # Display tool results after agent response
-            self.display_tool_results()
         elif command == "/chat":
             self.console.print("[info]Chatting...[/info]")
             # Direct chat with LLM without tools
             response = await self.agent.llm_client.chat(user_message=args, tools=None)
-            self.console.print(Panel(response.message.content, title=f"[{ORANGE_COLOR} bold]LLM Response[/{ORANGE_COLOR} bold]", border_style=ORANGE_COLOR, expand=True))
+            self.console.print(Panel(response.message.content, title=f"[{CLAUDE_PRIMARY} bold]LLM Response[/{CLAUDE_PRIMARY} bold]", border_style=CLAUDE_PRIMARY, expand=True))
             self.last_output = response.message.content
         elif command == "/add":
             self.add_file_to_context(args)
@@ -909,8 +926,8 @@ class OpenCursorApp:
                 Markdown("**Welcome to OpenCursor!** Type `/help` for available commands."),
                 Markdown("\n".join(system_info))
             ),
-            title=f"[{ORANGE_COLOR} bold]System Information[/{ORANGE_COLOR} bold]",
-            border_style=ORANGE_COLOR,
+            title=f"[{CLAUDE_PRIMARY} bold]System Information[/{CLAUDE_PRIMARY} bold]",
+            border_style=CLAUDE_PRIMARY,
             box=box.ROUNDED
         )
         
@@ -952,13 +969,13 @@ class OpenCursorApp:
                 # Create a styled input panel title
                 prompt_message = f"{self.current_mode}> "
                 
-                # Display a styled input panel title
-                self.console.print(f"[{ORANGE_COLOR} bold]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Enter your command or query ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/{ORANGE_COLOR} bold]")
+                # Display Claude-style input separator
+                self.console.print(f"[{CLAUDE_WARNING} bold]{'─' * 18} ENTER COMMAND {'─' * 18}[/{CLAUDE_WARNING} bold]")
                 
-                # Use the prompt_toolkit session with proper styling
+                # Use Claude-style prompt styling
                 user_input = await asyncio.to_thread(
                     lambda: self.session.prompt(
-                        HTML(f"<b>{prompt_message}</b> "),
+                        HTML(f"<ansigreen><b>[{self.current_mode.upper()}]></b></ansigreen> "),
                     )
                 )
 
@@ -994,18 +1011,19 @@ class OpenCursorApp:
                 # Process response to split think and regular content
                 processed_response = self._split_response_with_think(response)
                 
-                # Display the processed response in a panel
+                # Display tool results first
+                self.display_tool_results()
+                
+                # Display the processed response in a Claude-style panel
                 self.console.print(Panel(
                     processed_response,
-                    title=f"[{ORANGE_COLOR} bold]Agent Response[/{ORANGE_COLOR} bold]", 
-                    border_style=ORANGE_COLOR, 
-                    expand=True
+                    title=f"[{CLAUDE_SUCCESS} bold]🤖 AGENT RESPONSE 🤖[/{CLAUDE_SUCCESS} bold]", 
+                    border_style=CLAUDE_SUCCESS, 
+                    expand=True,
+                    box=box.ROUNDED
                 ))
                     
                 self.last_output = response
-                
-                # Display tool results after agent response
-                self.display_tool_results()
                     
             # except KeyboardInterrupt:
             #     self.console.print("\n[warning]Exiting...[/warning]")
@@ -1013,7 +1031,7 @@ class OpenCursorApp:
             # except Exception as e:
             #     self.console.print(f"[error]Error:[/error] {str(e)}")
         
-        self.console.print(f"[{ORANGE_COLOR} bold]Thank you for using OpenCursor![/{ORANGE_COLOR} bold]")
+        self.console.print(f"[{CLAUDE_PRIMARY} bold]Thank you for using OpenCursor![/{CLAUDE_PRIMARY} bold]")
 
     def extension_to_language(self, file_path):
         """Convert file extension to language name for syntax highlighting"""
@@ -1070,35 +1088,29 @@ async def main():
     parser.add_argument("--host", default="http://192.168.170.76:11434", help="Ollama host URL (default: http://192.168.170.76:11434)")
     parser.add_argument("-w", "--workspace", help="Path to workspace directory")
     parser.add_argument("-q", "--query", default=None, help="Initial query to process")
-    parser.add_argument("--no-thinking", action="store_true", help="Disable thinking process in responses")
+    parser.add_argument("--thinking", action="store_true", help="Enable thinking process in responses (disabled by default)")
     parser.add_argument("--num-ctx", type=int, default=2048, help="Context window size (default: 2048)")
     args = parser.parse_args()
     
-    # Create custom theme with orange accent color
+    # Create custom theme with Claude-inspired colors
     custom_theme = Theme({
-        "info": RichStyle(color="cyan"),
-        "warning": RichStyle(color="yellow"),
-        "error": RichStyle(color="red"),
-        "success": RichStyle(color="green"),
-        "orange": RichStyle(color=ORANGE_COLOR),
+        "info": RichStyle(color=CLAUDE_INFO),
+        "warning": RichStyle(color=CLAUDE_WARNING),
+        "error": RichStyle(color=CLAUDE_ERROR),
+        "success": RichStyle(color=CLAUDE_SUCCESS),
+        "primary": RichStyle(color=CLAUDE_PRIMARY),
     })
     
     console = Console(theme=custom_theme, width=None)
-    
-    # Modify system prompt based on no-thinking flag
-    system_prompt = None
-    if args.no_thinking:
-        # Import the system prompt and append /no_think
-        from code_agent.src.prompts import SYSTEM_PROMPT
-        system_prompt = SYSTEM_PROMPT + " /no_think"
     
     # Create and run the app with parsed arguments
     app = OpenCursorApp(
         model_name=args.model,
         host=args.host,
         workspace_path=args.workspace,
-        system_prompt=system_prompt,
-        num_ctx=args.num_ctx
+        system_prompt=None,
+        num_ctx=args.num_ctx,
+        no_think=not args.thinking  # Invert logic: no_think by default, thinking only when flag is passed
     )
     await app.run(initial_query=args.query)
 
@@ -1106,8 +1118,8 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        custom_theme = Theme({"orange": RichStyle(color=ORANGE_COLOR)})
-        Console(theme=custom_theme).print(f"\n[orange bold]Goodbye![/orange bold]")
+        custom_theme = Theme({"primary": RichStyle(color=CLAUDE_PRIMARY)})
+        Console(theme=custom_theme).print(f"\n[primary bold]Goodbye![/primary bold]")
 
 # Add a non-async entry point for the package
 def entry_point():
@@ -1124,5 +1136,5 @@ def entry_point():
                 
         asyncio.run(main())
     except KeyboardInterrupt:
-        custom_theme = Theme({"orange": RichStyle(color=ORANGE_COLOR)})
-        Console(theme=custom_theme).print(f"\n[orange bold]Goodbye![/orange bold]")
+        custom_theme = Theme({"primary": RichStyle(color=CLAUDE_PRIMARY)})
+        Console(theme=custom_theme).print(f"\n[primary bold]Goodbye![/primary bold]")
