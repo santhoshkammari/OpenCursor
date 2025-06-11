@@ -10,7 +10,7 @@ from .tool_playwright import register_playwright_search_tool
 
 
 class CodeAgent:
-    def __init__(self, model_name: str = "qwen3_14b_q6k:latest", host: str = "http://192.168.170.76:11434", workspace_root: str = None, system_prompt: Optional[str] = None):
+    def __init__(self, model_name: str = "qwen3_14b_q6k:latest", host: str = "http://192.168.170.76:11434", workspace_root: str = None, system_prompt: Optional[str] = None, num_ctx: int = 2048):
         """
         Initialize a CodeAgent that can use tools and execute tool calls.
 
@@ -19,8 +19,9 @@ class CodeAgent:
             host (str): The host URL for the Ollama API.
             workspace_root (str): The root directory of the workspace.
             system_prompt (Optional[str]): Optional custom system prompt to use.
+            num_ctx (int): Context window size for the model.
         """
-        self.llm_client = LLMClient(model_name=model_name, host=host)
+        self.llm_client = LLMClient(model_name=model_name, host=host, num_ctx=num_ctx)
         self.tools_manager = Tools(workspace_root=workspace_root)
         self.register_tools()
         self.max_iterations = 100

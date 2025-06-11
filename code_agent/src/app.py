@@ -194,7 +194,7 @@ class OpenCursorCompleter(Completer):
             )
 
 class OpenCursorApp:
-    def __init__(self, model_name: str = "qwen3_14b_q6k:latest", host: str = "http://192.168.170.76:11434", workspace_path: Optional[str] = None, system_prompt: Optional[str] = None):
+    def __init__(self, model_name: str = "qwen3_14b_q6k:latest", host: str = "http://192.168.170.76:11434", workspace_path: Optional[str] = None, system_prompt: Optional[str] = None, num_ctx: int = 2048):
         # Use provided workspace path or current working directory
         self.current_workspace = Path(workspace_path).resolve() if workspace_path else Path.cwd()
         
@@ -202,7 +202,7 @@ class OpenCursorApp:
         logging.getLogger().setLevel(logging.WARNING)
         
         # Initialize agent with current workspace
-        self.agent = CodeAgent(model_name=model_name, host=host, workspace_root=str(self.current_workspace), system_prompt=system_prompt)
+        self.agent = CodeAgent(model_name=model_name, host=host, workspace_root=str(self.current_workspace), system_prompt=system_prompt, num_ctx=num_ctx)
         
         # Create custom theme with orange accent color
         custom_theme = Theme({
@@ -1066,11 +1066,12 @@ async def main():
 
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="OpenCursor - An AI-powered code assistant")
-    parser.add_argument("-m", "--model", default="qwen3_14b_q6k:latest", help="Model name to use")
-    parser.add_argument("--host", default="http://192.168.170.76:11434", help="Ollama host URL")
+    parser.add_argument("-m", "--model", default="qwen3_14b_q6k:latest", help="Model name to use (default: qwen3_14b_q6k:latest)")
+    parser.add_argument("--host", default="http://192.168.170.76:11434", help="Ollama host URL (default: http://192.168.170.76:11434)")
     parser.add_argument("-w", "--workspace", help="Path to workspace directory")
     parser.add_argument("-q", "--query", default=None, help="Initial query to process")
     parser.add_argument("--no-thinking", action="store_true", help="Disable thinking process in responses")
+    parser.add_argument("--num-ctx", type=int, default=2048, help="Context window size (default: 2048)")
     args = parser.parse_args()
     
     # Create custom theme with orange accent color
@@ -1096,7 +1097,8 @@ async def main():
         model_name=args.model,
         host=args.host,
         workspace_path=args.workspace,
-        system_prompt=system_prompt
+        system_prompt=system_prompt,
+        num_ctx=args.num_ctx
     )
     await app.run(initial_query=args.query)
 
